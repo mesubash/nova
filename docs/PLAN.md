@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.0 released. V1.1 (local transcription) in progress.
+Status: V1.3 released.
 
 ## Purpose
 
@@ -98,6 +98,12 @@ Transcribe voice questions on the Mac with Whisper running on Apple's MLX framew
 
 Complete when local transcription can be selected without code changes; latency and accuracy are measured against Gemini with the same audio and recorded; silence and noise do not produce invented text; a missing or failed model gives a clear error and typed input still works; tests use a fake model; and the documentation states the model size, the one-time download, and that local transcription keeps audio on the Mac.
 
+### V1.2 — Safety and accuracy evidence
+
+Gather evidence for existing claims rather than adding features. Run an adversarial prompt suite through the real model and the validation layer; measure transcription accuracy on recordings of the user's own voice for Gemini and local Whisper and re-decide the default from those results; and handle Gemini rate limits by waiting and retrying once when the requested delay is short.
+
+Complete when the adversarial suite executes no unapproved action and its results are recorded; the transcriber default is justified by real-voice measurements; a short rate-limit delay no longer fails a request while a long one reports how long to wait; and tests, lint, and documentation are updated.
+
 ### V1.3 — Nepali and English
 
 Let the user speak and type in Nepali, English, or a mix, and answer in the same language. Measure Nepali transcription on the user's own voice before choosing a backend, check which macOS voices can read Nepali text, and fall back clearly (text without speech) when no suitable voice exists.
@@ -138,14 +144,16 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 
 ## Progress
 
-- [ ] V0.1 Foundation and text conversation
-- [ ] V0.2 Spoken output
-- [ ] V0.3 Voice input
+- [x] V0.1 Foundation and text conversation
+- [x] V0.2 Spoken output
+- [x] V0.3 Voice input
 - [x] V0.4 Small desktop interface
-- [ ] V0.5 Controlled desktop actions
-- [ ] V0.6 Persistent notes
+- [x] V0.5 Controlled desktop actions
+- [x] V0.6 Persistent notes
 - [x] V1.0 Portfolio release
-- [ ] V1.1 Local transcription
+- [x] V1.1 Local transcription
+- [x] V1.2 Safety and accuracy evidence
+- [x] V1.3 Nepali and English
 
 ## After V1.0 (optional, one at a time)
 
