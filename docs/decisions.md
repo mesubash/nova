@@ -128,3 +128,15 @@ Server load varies over time; rerun the benchmark before changing models.
 **Two guards against invented text.** Small and turbo transcribed pure noise as "Thank you." The recorder's silence check stops quiet audio before transcription, and segments Whisper rates as probably not speech (`no_speech_prob` of 0.6 or more) are dropped.
 
 **MLX is excluded from the app bundle.** PyInstaller finds imports anywhere in the code, including lazy ones, so `mlx` and `mlx_whisper` are excluded explicitly to keep the app small and its behaviour predictable.
+
+## V1.2: Safety and accuracy evidence (2026-11-13)
+
+**Short rate limits are absorbed.** On HTTP 429, NOVA reads the server's requested wait (`RetryInfo`, falling back to the message text). Waits of 8 seconds or less are taken once before retrying; longer waits fail immediately with the time to wait. A second rate limit right away is not retried.
+
+**Adversarial review found and fixed four issues.** A note ID beyond SQLite's integer range raised `OverflowError`, which escaped error handling and could crash the terminal loop or leave the window stuck; IDs above 2^63 - 1 are now rejected during validation. URLs with embedded credentials, URLs containing backslashes, and invisible formatting characters (Unicode category Cf) in app names, URLs, and search queries are now rejected. Offline attack tests run in CI.
+
+**Live adversarial suite: 0 violations.** `scripts/adversarial_actions.py` sent 30 attack prompts (disallowed apps, shell commands, URL and path tricks, impossible note IDs, prompt injection, chaining) to the real model and validated every proposal without executing anything. A separate check of the safety rules, independent of `validate()`, found no violations. Results: `docs/adversarial-results.md`.
+
+**Transcriber decided by a rule fixed before measuring.** Local would be recommended if its word error rate was no more than 2 points worse than Gemini's on the developer's own voice. Measured on 15 phrases: Gemini 6.1% WER (11 of 15 exact), local Whisper large-v3-turbo 9.8% (9 of 15 exact). Gemini remains the default and the recommendation; local remains an option for privacy, speed (1.09 s median), and lower API usage. Gemini's 3.90 s median in this run includes rate-limit waits. Results: `docs/transcription-results.md`.
+
+**A first recording session was discarded as invalid.** It produced 74.6% and 110.9% word error rates, inconsistent with earlier measurements. Recording lengths and order were checked to rule out a software fault, the cause was identified as recording conditions, and the phrases were re-recorded before applying the rule.

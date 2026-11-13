@@ -1,5 +1,6 @@
 """Turn an untrusted action proposal into a validated action, or reject it."""
 
+import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ MAX_APP_NAME_LENGTH = 100
 MAX_URL_LENGTH = 2048
 MAX_QUERY_LENGTH = 100
 PREVIEW_LENGTH = 80
+MAX_NOTE_ID = 2**63 - 1  # the largest integer SQLite can store
 
 
 class ActionRejected(Exception):
@@ -189,6 +191,8 @@ def _note_id(value: Any) -> int:
         raise ActionRejected("A note number must be a whole number.")
     if number <= 0:
         raise ActionRejected("Note numbers start at 1.")
+    if number > MAX_NOTE_ID:
+        raise ActionRejected("That note number is too large.")
     return number
 
 
@@ -202,6 +206,7 @@ def _preview(text: str) -> str:
 def _open_app(args: Mapping[str, Any], policy: ActionPolicy) -> OpenApp:
     _expect_keys(args, "app")
     name = _string(args, "app", MAX_APP_NAME_LENGTH)
+    _reject_invisible(name, "app")
     for allowed in policy.allowed_apps:
         if allowed.casefold() == name.casefold():
             return OpenApp(allowed)
@@ -211,6 +216,9 @@ def _open_app(args: Mapping[str, Any], policy: ActionPolicy) -> OpenApp:
 def _open_url(args: Mapping[str, Any], policy: ActionPolicy) -> OpenUrl:
     _expect_keys(args, "url")
     url = _string(args, "url", MAX_URL_LENGTH)
+    _reject_invisible(url, "url")
+    if "\\" in url:
+        raise ActionRejected("Web addresses cannot contain backslashes.")
     if any(char.isspace() for char in url):
         raise ActionRejected("Web addresses cannot contain spaces.")
     try:
@@ -220,12 +228,15 @@ def _open_url(args: Mapping[str, Any], policy: ActionPolicy) -> OpenUrl:
         raise ActionRejected("That web address is malformed.") from None
     if parts.scheme.lower() not in ("http", "https") or not host:
         raise ActionRejected("Only http and https web addresses can be opened.")
+    if parts.username is not None or parts.password is not None:
+        raise ActionRejected("Web addresses with a user name or password are not allowed.")
     return OpenUrl(url)
 
 
 def _search_files(args: Mapping[str, Any], policy: ActionPolicy) -> SearchFiles:
     _expect_keys(args, "query")
     query = _string(args, "query", MAX_QUERY_LENGTH)
+    _reject_invisible(query, "query")
     if "/" in query or "\\" in query:
         raise ActionRejected("Search by file name only, without folder paths.")
     if policy.search_folder is None:
@@ -283,3 +294,9 @@ def _delete_note(args: Mapping[str, Any], policy: ActionPolicy) -> DeleteNote:
     _expect_keys(args, "id")
     note_id = _note_id(args["id"])
     return DeleteNote(note_id, _current_text(store, note_id), store)
+
+
+def _reject_invisible(value: str, key: str) -> None:
+    """Reject invisible formatting characters that can disguise names and addresses."""
+    if any(unicodedata.category(char) == "Cf" for char in value):
+        raise ActionRejected(f"{key!r} contains invisible formatting characters.")

@@ -4,7 +4,7 @@
 
 A macOS-first personal AI voice assistant, built as a learning project on a MacBook Air M4.
 
-**Status:** V1.0. A personal voice assistant for macOS with typed and spoken conversation, a desktop window, confirmed desktop actions, and persistent notes. Built as a learning project; see [docs/PLAN.md](docs/PLAN.md) and [docs/architecture.md](docs/architecture.md).
+**Status:** V1.2. A personal voice assistant for macOS with typed and spoken conversation, a desktop window, confirmed desktop actions, and persistent notes, with measured safety and accuracy. Built as a learning project; see [docs/PLAN.md](docs/PLAN.md) and [docs/architecture.md](docs/architecture.md).
 
 ![NOVA desktop window](docs/images/nova-window.png)
 
@@ -53,17 +53,23 @@ The first voice question downloads `whisper-large-v3-turbo` (about 1.6 GB) from 
 
 Local is faster and steadier and halves Gemini usage; Gemini was more accurate on this small, synthetic-voice sample. Smaller models (`mlx-community/whisper-small-mlx`, `mlx-community/whisper-tiny-mlx`) are faster still and can be chosen with `NOVA_LOCAL_MODEL`.
 
+On the developer's own voice (15 phrases, `scripts/voice_benchmark.py`), Gemini had a 6.1% word error rate and local Whisper 9.8%; see [docs/transcription-results.md](docs/transcription-results.md). Gemini therefore stays the default and recommended backend. Choose local transcription if you value privacy, speed, and lower API usage over the last few points of accuracy.
+
 ## Limitations
 
 - macOS on Apple Silicon only; tested on a MacBook Air M4.
 - Requires an internet connection: chat and transcription both use Gemini.
-- Gemini's free tier allows 15 requests per minute for this model. A voice question uses two (transcribe, then answer); beyond the limit NOVA shows a rate-limit error.
+- Gemini's free tier allows 15 requests per minute for this model, and a voice question uses two. When Gemini asks for a short wait (8 seconds or less), NOVA waits and retries once; otherwise it tells you how long to wait.
 - Push-to-talk only: no wake word, and you cannot interrupt NOVA by speaking.
 - One action per request. Action results and notes are not sent back to the model, so it cannot reason about them (for example, which file is newest).
 - Note search matches keywords, not meaning.
 - The API key is stored in a private file rather than the macOS Keychain.
 - The app is not signed with a Developer ID or notarized.
 - Local transcription is available when running from source only; the packaged app uses Gemini.
+
+## Security
+
+Gemini can only *propose* actions; NOVA validates every proposal (allowed apps, http and https URLs only, file-name search inside one approved folder, valid note numbers) and asks before anything with side effects. A live adversarial suite of 30 attack prompts, including prompt injection, found **0 violations**; see [docs/adversarial-results.md](docs/adversarial-results.md). Offline attack tests run in CI on every change.
 
 ## Requirements
 

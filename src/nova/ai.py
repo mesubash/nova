@@ -1,5 +1,7 @@
 """The only module that talks to the Gemini API."""
 
+import math
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -16,6 +18,9 @@ Role = Literal["user", "assistant"]
 
 MAX_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 1.0
+MAX_RATE_LIMIT_WAIT_SECONDS = 8.0
+_RETRY_IN_MESSAGE = re.compile(r"retry in (\d+(?:\.\d+)?)\s*s", re.IGNORECASE)
+_RETRY_DELAY_FIELD = re.compile(r"^(\d+(?:\.\d+)?)s$")
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _GEMINI_ROLES = {"user": "user", "assistant": "model"}
 
@@ -44,9 +49,12 @@ class Message:
 class AIError(Exception):
     """A model request failed. The message is safe to show the user."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self, message: str, *, retryable: bool = False, retry_after: float | None = None
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.retry_after = retry_after  # set for rate limits: the server's requested wait
 
 
 class GeminiClient:
@@ -108,13 +116,21 @@ class GeminiClient:
         self, contents: list[types.Content], config: types.GenerateContentConfig
     ) -> types.GenerateContentResponse:
         attempt = 1
+        waited_for_rate_limit = False
         while True:
             try:
                 return self._request_once(contents, config)
             except AIError as exc:
                 if not exc.retryable or attempt >= MAX_ATTEMPTS:
                     raise
-            self._sleep(RETRY_DELAY_SECONDS * attempt)
+                if exc.retry_after is not None:
+                    if waited_for_rate_limit:
+                        raise  # a second rate limit right away: the quota is exhausted
+                    waited_for_rate_limit = True
+                    delay = exc.retry_after
+                else:
+                    delay = RETRY_DELAY_SECONDS * attempt
+            self._sleep(delay)
             attempt += 1
 
     def _request_once(
@@ -129,6 +145,8 @@ class GeminiClient:
         except httpx2.TransportError as exc:
             raise AIError("Could not reach Gemini. Check your internet connection.") from exc
         except errors.ClientError as exc:
+            if exc.code == 429:
+                raise _rate_limit_error(exc) from exc
             raise AIError(f"Gemini rejected the request ({exc.code}): {exc.message}") from exc
         except errors.APIError as exc:
             raise AIError(
@@ -206,3 +224,27 @@ def _action_tool(allowed_apps: tuple[str, ...]) -> types.Tool:
             ),
         ]
     )
+
+
+def _rate_limit_error(exc: errors.ClientError) -> AIError:
+    """Turn HTTP 429 into a short message, retryable only if the requested wait is short."""
+    delay = _retry_delay(exc)
+    if delay is None:
+        return AIError("Gemini's request limit was reached. Wait a minute and try again.")
+    message = f"Gemini's request limit was reached. Try again in about {math.ceil(delay)} seconds."
+    if delay <= MAX_RATE_LIMIT_WAIT_SECONDS:
+        return AIError(message, retryable=True, retry_after=delay)
+    return AIError(message)
+
+
+def _retry_delay(exc: errors.ClientError) -> float | None:
+    """Read the server's requested wait: RetryInfo first, then the message text."""
+    details = getattr(exc, "details", None)
+    error = details.get("error", {}) if isinstance(details, dict) else {}
+    for item in error.get("details", None) or []:
+        if isinstance(item, dict) and str(item.get("@type", "")).endswith("RetryInfo"):
+            match = _RETRY_DELAY_FIELD.match(str(item.get("retryDelay", "")))
+            if match:
+                return float(match.group(1))
+    match = _RETRY_IN_MESSAGE.search(exc.message or "")
+    return float(match.group(1)) if match else None

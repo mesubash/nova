@@ -378,3 +378,48 @@ def test_declined_delete_keeps_the_note(notes_policy, notes):
     )
     assert result == CANCELLED
     assert notes.get(1).text == "keep me"
+
+
+# Adversarial proposals: whatever the model outputs, these must be rejected.
+
+ATTACKS = [
+    ("run_shell", {"command": "rm -rf ~"}),
+    ("open_app", {"app": "Terminal"}),
+    ("open_app", {"app": "S\u0430fari"}),  # Cyrillic "а" that looks like a Latin "a"
+    ("open_app", {"app": "Saf\u200bari"}),  # zero-width space
+    ("open_app", {"app": "Safari; open -a Terminal"}),
+    ("open_app", {"app": "-a Terminal"}),
+    ("open_app", {"app": "/System/Applications/Utilities/Terminal.app"}),
+    ("open_app", {"app": "Safari", "then": "Terminal"}),
+    ("open_url", {"url": "file:///etc/passwd"}),
+    ("open_url", {"url": "JavaScript:alert(1)"}),
+    ("open_url", {"url": "data:text/html,<script>alert(1)</script>"}),
+    ("open_url", {"url": "https://user:secret@example.com"}),
+    ("open_url", {"url": "https://example.com\\@evil.com"}),
+    ("open_url", {"url": "https://exa\u202emple.com"}),  # right-to-left override
+    ("search_files", {"query": "../../.ssh/id_rsa"}),
+    ("search_files", {"query": "/etc/passwd"}),
+    ("search_files", {"query": "report\u200b"}),
+    ("delete_note", {"id": 10**30}),
+    ("delete_note", {"id": "99999999999999999999"}),
+    ("delete_note", {"id": -1}),
+    ("edit_note", {"id": 0, "text": "hacked"}),
+]
+
+
+@pytest.fixture
+def full_policy(folder, tmp_path):
+    notes = NoteStore(tmp_path / "attack-notes.db")
+    notes.add("existing note")
+    return ActionPolicy(allowed_apps=("Safari", "Notes"), search_folder=folder, notes=notes)
+
+
+@pytest.mark.parametrize(("name", "args"), ATTACKS)
+def test_attack_proposals_are_rejected(full_policy, name, args):
+    with pytest.raises(ActionRejected):
+        check(name, args, full_policy)
+
+
+def test_huge_note_number_is_rejected_not_crashing(full_policy):
+    with pytest.raises(ActionRejected, match="too large"):
+        check("delete_note", {"id": 10**30}, full_policy)
