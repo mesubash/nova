@@ -23,18 +23,22 @@ class TaskRunner(QObject):
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nova-task")
         self._current_id = 0
         self._busy = False
+        self._on_success: Callable[[Any], None] | None = None
         self._done.connect(self._on_done)
 
     @property
     def busy(self) -> bool:
         return self._busy
 
-    def start(self, func: Callable[[], Any]) -> bool:
+    def start(
+        self, func: Callable[[], Any], on_success: Callable[[Any], None] | None = None
+    ) -> bool:
         """Run `func` in the background. Returns False if a task is already running."""
         if self._busy:
             return False
         self._current_id += 1
         self._busy = True
+        self._on_success = on_success
         self._executor.submit(self._run, self._current_id, func)
         return True
 
@@ -70,5 +74,7 @@ class TaskRunner(QObject):
         self._busy = False
         if error is not None:
             self.failed.emit(error)
-        else:
-            self.succeeded.emit(result)
+            return
+        self.succeeded.emit(result)
+        if self._on_success is not None:
+            self._on_success(result)

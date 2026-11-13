@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from nova.ai import GeminiClient
 from nova.config import ConfigError, load_config
 from nova.conversation import Conversation
-from nova.speech import Speaker
+from nova.speech import Recorder, Speaker
 from nova.ui.window import MainWindow
 
 
@@ -21,7 +21,9 @@ def main() -> int:
 
     client = GeminiClient(config)
     speaker = Speaker()
-    window = MainWindow(Conversation(client, config.max_history_turns), speaker)
+    recorder = Recorder(config.max_recording_seconds)
+    conversation = Conversation(client, config.max_history_turns)
+    window = MainWindow(conversation, speaker, recorder, client.transcribe)
     window.show()
     try:
         return app.exec()

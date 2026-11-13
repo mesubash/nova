@@ -4,7 +4,7 @@ import pytest
 from PySide6.QtCore import Qt
 
 from nova.ai import AIError
-from nova.speech import SpeechError
+from nova.speech import RecordingError, SpeechError
 from nova.ui.window import MainWindow, State
 
 
@@ -39,12 +39,50 @@ class FakeSpeaker:
         self.stops += 1
 
 
+class FakeRecorder:
+    def __init__(self, result=b"wav"):
+        self.result = result
+        self.calls = 0
+
+    def record(self, wait_for_stop):
+        self.calls += 1
+        wait_for_stop(5.0)  # blocks until the talk button is released
+        if isinstance(self.result, BaseException):
+            raise self.result
+        return self.result
+
+
+class FakeTranscriber:
+    def __init__(self, heard="hello"):
+        self.heard = heard
+        self.received = []
+
+    def __call__(self, wav):
+        self.received.append(wav)
+        if isinstance(self.heard, BaseException):
+            raise self.heard
+        return self.heard
+
+
 @pytest.fixture
 def make_window(qtbot):
     windows = []
 
-    def make(answers=(), speaker=None, gate=None):
-        window = MainWindow(FakeConversation(answers, gate), speaker or FakeSpeaker())
+    def make(
+        answers=(),
+        *,
+        conversation=None,
+        speaker=None,
+        recorder=None,
+        transcriber=None,
+        gate=None,
+    ):
+        window = MainWindow(
+            conversation or FakeConversation(answers, gate),
+            speaker or FakeSpeaker(),
+            recorder or FakeRecorder(),
+            transcriber or FakeTranscriber(),
+        )
         qtbot.addWidget(window)
         windows.append(window)
         return window
@@ -60,8 +98,17 @@ def ask(qtbot, window, text):
     qtbot.waitUntil(lambda: window.state != State.THINKING, timeout=2000)
 
 
+def talk(qtbot, window):
+    window.talk_button.pressed.emit()
+    window.talk_button.released.emit()
+    qtbot.waitUntil(lambda: window.state in (State.READY, State.ERROR), timeout=3000)
+
+
 def text_of(window):
     return window.transcript.toPlainText()
+
+
+# Typed questions
 
 
 def test_window_starts_ready(make_window):
@@ -69,11 +116,12 @@ def test_window_starts_ready(make_window):
     assert window.status.text() == "Ready"
     assert window.transcript.isReadOnly()
     assert window.send_button.isEnabled()
+    assert window.talk_button.isEnabled()
 
 
 def test_typed_question_shows_answer_and_speaks(qtbot, make_window):
     speaker = FakeSpeaker()
-    window = make_window(answers=["Kathmandu"], speaker=speaker)
+    window = make_window(["Kathmandu"], speaker=speaker)
     ask(qtbot, window, "Capital of Nepal?")
     assert "You: Capital of Nepal?" in text_of(window)
     assert "NOVA: Kathmandu" in text_of(window)
@@ -83,7 +131,7 @@ def test_typed_question_shows_answer_and_speaks(qtbot, make_window):
 
 
 def test_enter_key_submits(qtbot, make_window):
-    window = make_window(answers=["ok"])
+    window = make_window(["ok"])
     window.input.setText("hello")
     qtbot.keyClick(window.input, Qt.Key.Key_Return)
     qtbot.waitUntil(lambda: window.state == State.READY, timeout=2000)
@@ -92,15 +140,18 @@ def test_enter_key_submits(qtbot, make_window):
 
 def test_controls_are_disabled_while_thinking(qtbot, make_window):
     gate = threading.Event()
-    window = make_window(answers=["done"], gate=gate)
+    recorder = FakeRecorder()
+    window = make_window(["done"], gate=gate, recorder=recorder)
     window.input.setText("slow question")
     window.send_button.click()
 
-    assert window.state == State.THINKING
     assert window.status.text() == "Thinking…"
     assert not window.send_button.isEnabled()
     assert not window.input.isEnabled()
     assert not window.talk_button.isEnabled()
+
+    window.talk_button.pressed.emit()  # even a forced press is ignored while busy
+    assert recorder.calls == 0
 
     gate.set()
     qtbot.waitUntil(lambda: window.state == State.READY, timeout=2000)
@@ -115,7 +166,7 @@ def test_empty_input_does_nothing(make_window):
 
 
 def test_ai_error_is_shown_and_window_recovers(qtbot, make_window):
-    window = make_window(answers=[AIError("Gemini is busy"), "ok"])
+    window = make_window([AIError("Gemini is busy"), "ok"])
     ask(qtbot, window, "first")
     assert "Gemini is busy" in text_of(window)
     assert window.state == State.ERROR
@@ -127,13 +178,13 @@ def test_ai_error_is_shown_and_window_recovers(qtbot, make_window):
 
 
 def test_unexpected_error_is_labelled(qtbot, make_window):
-    window = make_window(answers=[RuntimeError("bug")])
+    window = make_window([RuntimeError("bug")])
     ask(qtbot, window, "q")
     assert "Unexpected error" in text_of(window)
 
 
 def test_speech_failure_keeps_answer_visible(qtbot, make_window):
-    window = make_window(answers=["Kathmandu"], speaker=FakeSpeaker(SpeechError("no say")))
+    window = make_window(["Kathmandu"], speaker=FakeSpeaker(SpeechError("no say")))
     ask(qtbot, window, "q")
     assert "NOVA: Kathmandu" in text_of(window)
     assert "Speech unavailable: no say" in text_of(window)
@@ -141,13 +192,68 @@ def test_speech_failure_keeps_answer_visible(qtbot, make_window):
 
 def test_new_question_stops_current_speech(qtbot, make_window):
     speaker = FakeSpeaker()
-    window = make_window(answers=["a"], speaker=speaker)
+    window = make_window(["a"], speaker=speaker)
     ask(qtbot, window, "q")
     assert speaker.stops >= 1
 
 
 def test_html_in_text_is_shown_literally(qtbot, make_window):
-    window = make_window(answers=["<i>answer</i>"])
+    window = make_window(["<i>answer</i>"])
     ask(qtbot, window, "<b>question</b>")
     assert "<b>question</b>" in text_of(window)
     assert "<i>answer</i>" in text_of(window)
+
+
+# Voice questions
+
+
+def test_hold_to_talk_records_until_release_then_answers(qtbot, make_window):
+    transcriber = FakeTranscriber("what time is it")
+    window = make_window(["It is noon"], transcriber=transcriber)
+
+    window.talk_button.pressed.emit()
+    assert window.state == State.LISTENING
+    assert window.talk_button.isEnabled()
+    qtbot.wait(100)
+    assert window.state == State.LISTENING  # still recording while held
+
+    window.talk_button.released.emit()
+    qtbot.waitUntil(lambda: window.state == State.READY, timeout=3000)
+    assert transcriber.received == [b"wav"]
+    assert "You (voice): what time is it" in text_of(window)
+    assert "NOVA: It is noon" in text_of(window)
+
+
+def test_talking_stops_speech_before_recording(make_window):
+    speaker = FakeSpeaker()
+    window = make_window(speaker=speaker)
+    window.talk_button.pressed.emit()
+    assert speaker.stops == 1
+    window.talk_button.released.emit()
+
+
+def test_no_speech_returns_to_ready_without_asking(qtbot, make_window):
+    conversation = FakeConversation()
+    window = make_window(conversation=conversation, transcriber=FakeTranscriber(""))
+    talk(qtbot, window)
+    assert "No speech detected" in text_of(window)
+    assert conversation.asked == []
+    assert window.state == State.READY
+
+
+@pytest.mark.parametrize(
+    ("recorder", "transcriber", "message"),
+    [
+        (FakeRecorder(RecordingError("mic denied")), FakeTranscriber(), "mic denied"),
+        (FakeRecorder(), FakeTranscriber(AIError("offline")), "offline"),
+    ],
+)
+def test_voice_errors_are_shown_and_window_recovers(
+    qtbot, make_window, recorder, transcriber, message
+):
+    window = make_window(recorder=recorder, transcriber=transcriber)
+    talk(qtbot, window)
+    assert message in text_of(window)
+    assert "Unexpected" not in text_of(window)
+    assert window.state == State.ERROR
+    assert window.talk_button.isEnabled()

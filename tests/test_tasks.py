@@ -64,3 +64,18 @@ def test_new_task_after_cancel_gets_only_its_own_result(qtbot, runner):
         runner.start(lambda: "new")
         release.set()
     assert blocker.args == ["new"]
+
+
+def test_on_success_callback_receives_result(qtbot, runner):
+    received = []
+    runner.start(lambda: 7, on_success=received.append)
+    qtbot.waitUntil(lambda: received == [7], timeout=2000)
+
+
+def test_callback_can_start_the_next_task(qtbot, runner):
+    received = []
+    runner.start(
+        lambda: 1,
+        on_success=lambda first: runner.start(lambda: first + 1, on_success=received.append),
+    )
+    qtbot.waitUntil(lambda: received == [2], timeout=2000)

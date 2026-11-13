@@ -1,5 +1,7 @@
 """Main NOVA window."""
 
+import threading
+from collections.abc import Callable
 from enum import StrEnum
 from html import escape
 
@@ -17,12 +19,16 @@ from PySide6.QtWidgets import (
 from nova import __version__
 from nova.ai import AIError
 from nova.conversation import Conversation
-from nova.speech import Speaker, SpeechError
+from nova.speech import Recorder, RecordingError, Speaker, SpeechError
 from nova.ui.tasks import TaskRunner
+
+_EXPECTED_ERRORS = (AIError, RecordingError)
 
 
 class State(StrEnum):
     READY = "Ready"
+    LISTENING = "Listening… release to send"
+    TRANSCRIBING = "Transcribing…"
     THINKING = "Thinking…"
     ERROR = "Error"
 
@@ -32,11 +38,16 @@ class MainWindow(QMainWindow):
         self,
         conversation: Conversation,
         speaker: Speaker,
+        recorder: Recorder,
+        transcribe: Callable[[bytes], str],
         runner: TaskRunner | None = None,
     ) -> None:
         super().__init__()
         self._conversation = conversation
         self._speaker = speaker
+        self._recorder = recorder
+        self._transcribe = transcribe
+        self._stop_recording: threading.Event | None = None
         self.runner = runner or TaskRunner(self)
 
         self.setWindowTitle(f"NOVA {__version__}")
@@ -71,7 +82,8 @@ class MainWindow(QMainWindow):
 
         self.input.returnPressed.connect(self.submit_text)
         self.send_button.clicked.connect(self.submit_text)
-        self.runner.succeeded.connect(self._on_answer)
+        self.talk_button.pressed.connect(self.start_listening)
+        self.talk_button.released.connect(self.stop_listening)
         self.runner.failed.connect(self._on_failure)
 
         self.set_state(State.READY)
@@ -81,20 +93,57 @@ class MainWindow(QMainWindow):
         self.state = state
         self.status.setText(state.value)
         idle = state in (State.READY, State.ERROR)
-        for widget in (self.input, self.send_button, self.talk_button):
-            widget.setEnabled(idle)
+        self.input.setEnabled(idle)
+        self.send_button.setEnabled(idle)
+        # The talk button stays enabled while held, so releasing it is always received.
+        self.talk_button.setEnabled(idle or state == State.LISTENING)
         if idle:
             self.input.setFocus()
+
+    # Typed questions
 
     def submit_text(self) -> None:
         text = self.input.text().strip()
         if not text or self.runner.busy:
             return
         self.input.clear()
-        self._speaker.stop()
         self._add_line("You", text)
+        self._ask(text)
+
+    # Voice questions
+
+    def start_listening(self) -> None:
+        if self.runner.busy:
+            return
+        stop = threading.Event()
+        self._stop_recording = stop
+        self._speaker.stop()
+        self.set_state(State.LISTENING)
+        self.runner.start(lambda: self._recorder.record(stop.wait), on_success=self._on_recorded)
+
+    def stop_listening(self) -> None:
+        if self._stop_recording is not None:
+            self._stop_recording.set()
+            self._stop_recording = None
+
+    def _on_recorded(self, wav: bytes) -> None:
+        self.set_state(State.TRANSCRIBING)
+        self.runner.start(lambda: self._transcribe(wav), on_success=self._on_transcribed)
+
+    def _on_transcribed(self, text: str) -> None:
+        if not text:
+            self._add_notice("No speech detected. Hold the button while you speak.")
+            self.set_state(State.READY)
+            return
+        self._add_line("You (voice)", text)
+        self._ask(text)
+
+    # Shared
+
+    def _ask(self, text: str) -> None:
+        self._speaker.stop()
         self.set_state(State.THINKING)
-        self.runner.start(lambda: self._conversation.ask(text))
+        self.runner.start(lambda: self._conversation.ask(text), on_success=self._on_answer)
 
     def _on_answer(self, answer: str) -> None:
         self._add_line("NOVA", answer)
@@ -105,7 +154,8 @@ class MainWindow(QMainWindow):
             self._add_error(f"Speech unavailable: {exc}")
 
     def _on_failure(self, error: Exception) -> None:
-        if isinstance(error, AIError):
+        self._stop_recording = None
+        if isinstance(error, _EXPECTED_ERRORS):
             message = str(error)
         else:
             message = f"Unexpected error: {error!r}"
@@ -114,6 +164,9 @@ class MainWindow(QMainWindow):
 
     def _add_line(self, who: str, text: str) -> None:
         self.transcript.append(f"<p><b>{who}:</b> {escape(text)}</p>")
+
+    def _add_notice(self, message: str) -> None:
+        self.transcript.append(f'<p style="color:#7f8c8d">{escape(message)}</p>')
 
     def _add_error(self, message: str) -> None:
         self.transcript.append(f'<p style="color:#c0392b">{escape(message)}</p>')
