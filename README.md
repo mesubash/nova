@@ -1,5 +1,7 @@
 # NOVA
 
+[![CI](https://github.com/mesubash/nova/actions/workflows/ci.yml/badge.svg)](https://github.com/mesubash/nova/actions/workflows/ci.yml)
+
 A macOS-first personal AI voice assistant, built as a learning project on a MacBook Air M4.
 
 **Status:** V0.4, typed and spoken conversation with Gemini in the terminal and in a desktop window. Desktop actions and personal notes are planned; see [docs/PLAN.md](docs/PLAN.md).
@@ -60,6 +62,8 @@ nova-gui
 ```
 
 ## Development
+
+GitHub Actions runs the same checks on every push and pull request (macOS, Python 3.12). See [docs/architecture.md](docs/architecture.md) for how the modules fit together.
 
 ```bash
 pytest
