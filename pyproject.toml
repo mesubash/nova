@@ -25,6 +25,10 @@ dev = [
     "ruff>=0.6",
 ]
 
+build = [
+    "pyinstaller>=6.10",
+]
+
 [project.scripts]
 nova = "nova.__main__:main"
 nova-gui = "nova.ui.app:main"

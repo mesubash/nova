@@ -61,6 +61,18 @@ For the desktop window:
 nova-gui
 ```
 
+## Build the macOS app
+
+```bash
+pip install -e ".[build]"
+scripts/build_app.sh
+open dist/NOVA.app
+```
+
+The app reads its settings from `~/Library/Application Support/NOVA/config.env`; on first launch without settings it offers to create and open that file.
+
+The build is for Apple Silicon and is **not signed with a Developer ID or notarized**. An app you build yourself opens normally. If you download it instead, macOS will warn you: right-click the app and choose Open, or allow it in System Settings › Privacy & Security. macOS may ask for microphone access again after each rebuild.
+
 ## Development
 
 GitHub Actions runs the same checks on every push and pull request (macOS, Python 3.12). See [docs/architecture.md](docs/architecture.md) for how the modules fit together.
