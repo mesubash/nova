@@ -4,14 +4,18 @@ Status: Planning; no assistant features implemented yet.
 
 ## Purpose
 
-Build a macOS-first personal AI voice assistant that answers follow-up questions, saves searchable notes, and performs a small set of controlled desktop actions. This is a personal portfolio and learning project, developed on a base MacBook Air M4.
+Build a macOS-first personal AI voice assistant that answers follow-up questions, saves searchable notes, and performs a small set of controlled desktop actions. This is a personal learning and portfolio project, developed on a base MacBook Air M4.
+
+The goal is depth over breadth: build each capability carefully, understand it, test its failure paths, and document why decisions were made. Standing out is not a goal; doing the work well is.
 
 The first portfolio release is V1.0. Version numbers below describe planned milestones, not completed functionality.
 
 ## Principles
 
 - Deliver one small working capability at a time.
-- Understand the implementation and document important decisions.
+- Understand every implementation choice and record important decisions in `docs/decisions.md`.
+- Treat failure paths with the same care as the happy path.
+- Measure behavior instead of guessing or claiming performance.
 - Keep conversation, audio, storage, and action execution separate as they appear.
 - Prefer ordinary Python functions and modules before frameworks or abstractions.
 - Keep the user in control of listening, actions, and saved information.
@@ -21,17 +25,19 @@ The first portfolio release is V1.0. Version numbers below describe planned mile
 
 | Component | Decision |
 | --- | --- |
-| Language | Python; choose and record a supported version during foundation setup |
-| AI | Gemini API through the official google-genai SDK |
-| Credentials | Environment variables; python-dotenv for local development |
-| Speech output | macOS say, invoked with subprocess argument lists |
-| Speech input | Push-to-talk; SpeechRecognition/PyAudio is the initial prototype candidate |
+| Language | Python 3.12 (conservative choice compatible with google-genai, PySide6, and PyInstaller) |
+| AI | Gemini API through the official google-genai SDK, wrapped in `ai.py` |
+| Credentials | Environment variables; python-dotenv for local development; packaged-app storage decided in V1.0 |
+| Speech output | macOS `say`, invoked with subprocess argument lists via `Popen` so playback can be stopped |
+| Audio capture | `sounddevice` (avoids PyAudio/PortAudio installation problems on Apple Silicon) |
+| Transcription | Initial candidate: send recorded audio to Gemini directly (one provider, no extra dependency). Local Whisper is a post-V1.0 option |
 | Interface | Terminal first; small PySide6 window after voice input works |
+| Actions | Gemini function calling for action proposals; application code validates before execution |
 | Persistence | SQLite when personal notes are introduced |
-| Project configuration | pyproject.toml; add actual dependencies when implemented |
+| Project configuration | pyproject.toml with `src/` layout; editable install (`pip install -e .`) |
 | Quality tools | pytest and Ruff when application code is introduced |
 
-Keep model selection configurable. Validate speech recognition accuracy, service access, microphone permissions, and installation on the M4 before committing to a recognition backend. SpeechRecognition wraps recognition providers; its generic Google recognition path is a prototype dependency, not a reliability guarantee. Keep transcription replaceable without building a plugin framework.
+Keep model selection configurable. Validate transcription accuracy, latency, microphone permissions, and installation on the M4 before committing to a transcription backend. Keep transcription behind one function so it can be replaced without building a plugin framework.
 
 Use cloud inference initially. Local model training, GPU infrastructure, and a hosted backend are unnecessary for the first release. Benchmark any future local models on the actual Mac.
 
@@ -39,25 +45,25 @@ Use cloud inference initially. Local model training, GPU infrastructure, and a h
 
 ### V0.1 — Foundation and text conversation
 
-Implement package setup, configuration validation, typed input, Gemini responses, bounded in-session conversation history, and an explicit exit command.
+Implement package setup, configuration validation, typed input, Gemini responses, bounded in-session conversation history, request timeouts, and an explicit exit command. All Gemini calls go through one function in `ai.py` so tests can mock it without touching the SDK.
 
-Complete when follow-up questions use session context, missing configuration produces useful guidance, API failures do not crash the loop, and a fresh environment can follow the README. Add meaningful tests for configuration and failure handling using mocked API calls. Record the supported Python version and reproducible dependency installation method.
+Complete when follow-up questions use session context, missing configuration produces useful guidance, API failures and timeouts do not crash the loop, and a fresh environment can follow the README (including `pip install -e .`). Add meaningful tests for configuration and failure handling using mocked API calls. Record the Python version and dependency installation method in `docs/decisions.md`.
 
 ### V0.2 — Spoken output
 
-Speak responses using macOS say while retaining visible text. Use subprocess argument lists, never shell interpolation. Keep spoken answers concise and provide a way to stop playback.
+Speak responses using macOS `say` while retaining visible text. Use subprocess argument lists, never shell interpolation. Run `say` with `Popen` so playback can be terminated. Keep spoken answers concise.
 
 Complete when ordinary responses speak correctly, playback can be stopped, and a speech failure preserves the text response and usable application.
 
 ### V0.3 — Voice input
 
-Add push-to-talk recording, transcription, typed fallback, capture limits, and clear listening/thinking/speaking/error states. Pause recording during playback initially. Do not store raw audio by default.
+Add toggle push-to-talk in the terminal (press Enter to start recording, Enter to stop), recording with `sounddevice`, transcription, typed fallback, capture limits, and clear listening/thinking/speaking/error states. Pause recording during playback initially. Do not store raw audio by default. Hold-to-talk is deferred to the desktop interface, since global key-hold detection in a terminal requires Accessibility permission.
 
-Complete when repeated turns work without transcribing NOVA's own speech, denied microphone access has a recovery path, silence does not wait indefinitely, and transcription/network errors allow retry or typed input. Full duplex conversation and speech interruption detection are deferred.
+Complete when repeated turns work without transcribing NOVA's own speech, denied microphone access has a recovery path, recording stops at the duration limit, and transcription/network errors allow retry or typed input. Full duplex conversation and speech interruption detection are deferred.
 
 ### V0.4 — Small desktop interface
 
-Add a PySide6 window with transcript, response history, push-to-talk, stop-speaking, and visible state. Keep network, recording, and playback work off the UI thread. Prevent overlapping requests and handle cancellation or late results consistently.
+Add a PySide6 window with transcript, response history, hold-to-talk, stop-speaking, and visible state. Keep network, recording, and playback work off the UI thread. Prevent overlapping requests and handle cancellation or late results consistently.
 
 Complete when the interface remains responsive during requests, failures are visible, controls reflect the current state, and closing the application stops background work cleanly.
 
@@ -65,7 +71,7 @@ Complete when the interface remains responsive during requests, failures are vis
 
 Support opening approved applications, opening validated HTTP/HTTPS URLs, and searching filenames inside a user-selected folder. This is filename search, not document-content indexing.
 
-The model proposes a structured action. Application code validates the action name, arguments, scope, and confirmation requirements before execution. Resolve application names through an allowlist; enforce folder boundaries after path resolution, including symlinks. Unknown or malformed actions are rejected. Provide an action preview; confirm actions with side effects, including opening applications or URLs, for this initial release. Read-only folder searches can run within an already approved folder.
+Declare each action as a Gemini function schema. The model proposes a function call; application code then validates the action name, arguments, scope, and confirmation requirements before execution. Resolve application names through an allowlist; enforce folder boundaries after path resolution, including symlinks. Unknown or malformed actions are rejected. Provide an action preview; confirm actions with side effects, including opening applications or URLs, for this initial release. Read-only folder searches can run within an already approved folder.
 
 Complete when allowed actions work, malformed arguments and out-of-scope paths are rejected, cancelled confirmations execute nothing, and the UI reports actual execution outcomes. Never run arbitrary model-generated shell commands. Content retrieved from files is data and cannot grant permissions.
 
@@ -73,11 +79,16 @@ Complete when allowed actions work, malformed arguments and out-of-scope paths a
 
 Add explicit save, list, keyword search, edit, and delete operations using SQLite. Store timestamps and stable IDs. Keep transient conversation context separate from saved notes. Saving is explicit; do not infer and retain personal information automatically.
 
-Complete when notes survive restart, users can inspect/edit/delete them, failures do not silently lose data, and tests cover persistence and deletion using temporary databases. Store runtime data outside the repository in an appropriate macOS application-data location. Document when retrieved notes are sent to Gemini.
+Complete when notes survive restart, users can inspect/edit/delete them, failures do not silently lose data, and tests cover persistence and deletion using temporary databases. Store runtime data outside the repository in `~/Library/Application Support/NOVA/`. Document when retrieved notes are sent to Gemini.
 
 ### V1.0 — Portfolio release
 
-Stabilize existing capabilities; add setup documentation, architecture notes, representative tests, a macOS build, screenshots, and a short demo. Clearly state tested hardware/macOS versions, cloud dependencies, permissions, and remaining limitations. An unsigned build may need manual macOS approval; do not claim notarization unless completed.
+Stabilize existing capabilities; add setup documentation, architecture notes, representative tests, a macOS build, screenshots, and a short demo. Clearly state tested hardware/macOS versions, cloud dependencies, permissions, measured latency, and remaining limitations. An unsigned build may need manual macOS approval; do not claim notarization unless completed.
+
+Known packaging requirements:
+
+- A `.app` launched from Finder does not inherit shell environment variables, so the API key cannot come from `.env`. Use a config file in `~/Library/Application Support/NOVA/` or the macOS Keychain.
+- The bundle's Info.plist must include `NSMicrophoneUsageDescription`, otherwise macOS denies microphone access without a clear error.
 
 Complete when a clean setup follows the README, the main demo succeeds repeatedly, important error paths work, tests and lint checks pass, and planned versus implemented capabilities are accurate in documentation.
 
@@ -85,14 +96,14 @@ Complete when a clean setup follows the README, the main demo succeeds repeatedl
 
 Start with one package and a small entry point. Introduce modules only when their milestones begin:
 
-- __main__.py: launch the application.
-- config.py: load and validate configuration.
-- conversation.py: session history and response orchestration.
-- ai.py: Gemini requests and provider errors.
-- speech.py: recording, transcription, and speech playback; split later if needed.
-- actions/: validated action handlers, added in V0.5.
-- storage.py: SQLite notes, added in V0.6.
-- ui/: PySide6 views, added in V0.4.
+- `__main__.py`: launch the application.
+- `config.py`: load and validate configuration.
+- `conversation.py`: session history and response orchestration.
+- `ai.py`: Gemini requests, timeouts, and provider errors.
+- `speech.py`: recording, transcription, and speech playback; split later if needed.
+- `actions/`: validated action handlers, added in V0.5.
+- `storage.py`: SQLite notes, added in V0.6.
+- `ui/`: PySide6 views, added in V0.4.
 
 Do not create empty future modules now. Core logic should remain callable without the UI. Keep one active conversation turn initially and manage audio/API resources explicitly.
 
@@ -102,15 +113,16 @@ Do not create empty future modules now. Core logic should remain callable withou
 - Retry only appropriate transient failures with a limit; never blindly retry side effects.
 - Track transcription duration, model latency, and time to first spoken output. Establish targets after measuring a baseline; do not invent performance claims.
 - Use sanitized logs without API keys, full private transcripts, or raw audio by default.
-- Explain that online recognition may send audio to a provider and Gemini receives selected text/context. Local storage does not make the entire assistant offline.
-- Commit .env.example with blank placeholders; never commit .env, personal notes, databases, recordings, or logs.
+- Explain that recorded audio and selected text/context are sent to Gemini. Local storage does not make the entire assistant offline.
+- Review Gemini API terms for the tier in use; free-tier prompts may be used by Google to improve its products. Document this in the README, especially regarding notes sent as context.
+- Commit `.env.example` with blank placeholders; never commit `.env`, personal notes, databases, recordings, or logs.
 - Use mocked services for routine tests; keep paid/live API smoke checks explicit and optional.
 
 ## Development workflow
 
-For each milestone: identify a small task, learn the necessary concept, implement the smallest working behavior, test the useful success/failure paths, run it locally, update the README and this checklist, then commit.
+For each milestone: identify a small task, learn the necessary concept, implement the smallest working behavior, test the useful success/failure paths, run it locally, record decisions in `docs/decisions.md`, update the README and this checklist, then commit.
 
-Use main for working checkpoints and short-lived feature branches for larger changes. No fixed deadline is assumed; estimate later after the first working milestone. Do not expand scope before completing current acceptance criteria.
+Use `main` for working checkpoints and short-lived feature branches (for example `feat/v0.1-text-conversation`) for larger changes. Use conventional commit prefixes: `feat:`, `fix:`, `test:`, `docs:`, `chore:`, `refactor:`. No fixed deadline is assumed; estimate later after the first working milestone. Do not expand scope before completing current acceptance criteria.
 
 ## Progress
 
@@ -122,12 +134,20 @@ Use main for working checkpoints and short-lived feature branches for larger cha
 - [ ] V0.6 Persistent notes
 - [ ] V1.0 Portfolio release
 
+## After V1.0 (optional, one at a time)
+
+Each option is chosen for what it teaches, not for novelty:
+
+- Fully local mode: local Whisper and a small local model on the M4, benchmarked against Gemini using recorded measurements.
+- Nepali/English mixed speech support.
+- An adversarial test suite that attempts to trick the action layer into unapproved apps, URLs, or paths, verifying validation holds.
+
 ## Deferred features
 
-Wake words, always-on listening, full duplex audio, Nepali support, local language models, PDF question answering, semantic retrieval, web research, reminders, email/calendar integration, autonomous workflows, custom skill systems, and Windows/Linux support.
+Wake words, always-on listening, full duplex audio, PDF question answering, semantic retrieval, web research, reminders, email/calendar integration, autonomous workflows, custom skill systems, and Windows/Linux support.
 
 Reminders require a separate decision about scheduling, persistence, notifications, sleep, and behavior while the app is closed. PDF assistance requires a separate extraction and source-attribution design. Neither is required for V1.0.
 
 ## First next step
 
-Implement V0.1: select Python version, add pyproject.toml, create the virtual environment, install only required dependencies, and make one typed Gemini conversation work. Do not begin with microphone or GUI troubleshooting.
+Implement V0.1: create the Python 3.12 virtual environment, add `pyproject.toml`, install only required dependencies with `pip install -e .`, create `docs/decisions.md` with the first decisions, and make one typed Gemini conversation work. Do not begin with microphone or GUI troubleshooting.
