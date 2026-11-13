@@ -2,6 +2,7 @@ import pytest
 
 from nova.config import (
     DEFAULT_MAX_HISTORY_TURNS,
+    DEFAULT_MAX_RECORDING_SECONDS,
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
     ConfigError,
     load_config,
@@ -16,6 +17,7 @@ def test_minimal_config_uses_defaults():
     assert config.model == "test-model"
     assert config.request_timeout_seconds == DEFAULT_REQUEST_TIMEOUT_SECONDS
     assert config.max_history_turns == DEFAULT_MAX_HISTORY_TURNS
+    assert config.max_recording_seconds == DEFAULT_MAX_RECORDING_SECONDS
 
 
 def test_values_are_stripped():
@@ -58,3 +60,9 @@ def test_invalid_history_limit_raises(raw):
 def test_repr_hides_api_key():
     config = load_config({**VALID_ENV, "GEMINI_API_KEY": "secret-value"})
     assert "secret-value" not in repr(config)
+
+
+@pytest.mark.parametrize("raw", ["abc", "0", "-3", "nan"])
+def test_invalid_recording_limit_raises(raw):
+    with pytest.raises(ConfigError, match="NOVA_MAX_RECORDING_SECONDS"):
+        load_config({**VALID_ENV, "NOVA_MAX_RECORDING_SECONDS": raw})

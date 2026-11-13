@@ -5,7 +5,7 @@ import pytest
 from nova import __main__ as app
 from nova.ai import AIError
 from nova.config import Config, ConfigError
-from nova.speech import SpeechError
+from nova.speech import RecordingError, SpeechError
 
 
 class FakeConversation:
@@ -55,39 +55,41 @@ def scripted(lines):
     return read
 
 
-def run(lines, answers=(), speaker=None, events=None):
+def run(lines, answers=(), speaker=None, events=None, heard=()):
     conversation = FakeConversation(answers, events)
     speaker = speaker or FakeSpeaker(events=events)
+    listener = FakeListener(heard, events)
     output = []
-    app.run_loop(conversation, speaker, read=scripted(lines), write=output.append)
-    return conversation, speaker, output
+    app.run_loop(conversation, speaker, listener, read=scripted(lines), write=output.append)
+    return conversation, speaker, output, listener
 
 
 def test_answers_question_then_exits():
-    conversation, _, output = run(["hi", "/exit"], answers=["hello"])
+    conversation, _, output, _ = run(["hi", "/exit"], answers=["hello"])
     assert conversation.asked == ["hi"]
     assert "nova> hello" in output
     assert output[-1] == "Goodbye."
 
 
 def test_answer_is_spoken():
-    _, speaker, _ = run(["hi", "/exit"], answers=["hello"])
+    _, speaker, _, _ = run(["hi", "/exit"], answers=["hello"])
     assert speaker.spoken == ["hello"]
 
 
 def test_speech_failure_keeps_text_and_loop_running():
     speaker = FakeSpeaker(error=SpeechError("no say"))
-    conversation, _, output = run(["q1", "q2", "/exit"], answers=["a1", "a2"], speaker=speaker)
+    conversation, _, output, _ = run(["q1", "q2", "/exit"], answers=["a1", "a2"], speaker=speaker)
     assert "nova> a1" in output
     assert "[speech unavailable] no say" in output
     assert conversation.asked == ["q1", "q2"]
 
 
-@pytest.mark.parametrize("line", ["", "   ", "/stop", "/STOP"])
-def test_enter_or_stop_command_stops_speech_without_asking(line):
-    conversation, speaker, _ = run([line, "/exit"])
+@pytest.mark.parametrize("line", ["/stop", "/STOP"])
+def test_stop_command_stops_speech_without_asking_or_listening(line):
+    conversation, speaker, _, listener = run([line, "/exit"])
     assert conversation.asked == []
-    assert speaker.events.count("stop") >= 1
+    assert listener.calls == 0
+    assert "stop" in speaker.events
 
 
 def test_new_question_stops_previous_speech_first():
@@ -98,35 +100,35 @@ def test_new_question_stops_previous_speech_first():
 
 
 def test_exit_stops_speech():
-    _, speaker, _ = run(["/exit"])
+    _, speaker, _, _ = run(["/exit"])
     assert speaker.events == ["stop"]
 
 
 def test_exit_command_is_case_insensitive():
-    conversation, _, output = run(["/EXIT"])
+    conversation, _, output, _ = run(["/EXIT"])
     assert conversation.asked == []
     assert output[-1] == "Goodbye."
 
 
 def test_ai_error_is_shown_and_loop_continues():
-    _, _, output = run(["q1", "q2", "/exit"], answers=[AIError("busy"), "ok"])
+    _, _, output, _ = run(["q1", "q2", "/exit"], answers=[AIError("busy"), "ok"])
     assert "[error] busy" in output
     assert "nova> ok" in output
 
 
 def test_end_of_input_exits_cleanly():
-    _, _, output = run([])
+    _, _, output, _ = run([])
     assert output[-1] == "Goodbye."
 
 
 def test_ctrl_c_at_prompt_exits():
-    conversation, _, output = run([KeyboardInterrupt()])
+    conversation, _, output, _ = run([KeyboardInterrupt()])
     assert conversation.asked == []
     assert output[-1] == "Goodbye."
 
 
 def test_ctrl_c_during_request_cancels_only_that_turn():
-    _, _, output = run(["q", "/exit"], answers=[KeyboardInterrupt()])
+    _, _, output, _ = run(["q", "/exit"], answers=[KeyboardInterrupt()])
     assert "[cancelled]" in output
     assert output[-1] == "Goodbye."
 
@@ -147,7 +149,7 @@ def test_main_cleans_up_even_if_loop_crashes(monkeypatch):
     monkeypatch.setattr(app, "GeminiClient", lambda config: fake_client)
     monkeypatch.setattr(app, "Speaker", lambda: fake_speaker)
 
-    def crashing_loop(conversation, speaker):
+    def crashing_loop(*args, **kwargs):
         raise RuntimeError("bug")
 
     monkeypatch.setattr(app, "run_loop", crashing_loop)
@@ -155,3 +157,57 @@ def test_main_cleans_up_even_if_loop_crashes(monkeypatch):
         app.main()
     fake_client.close.assert_called_once()
     fake_speaker.stop.assert_called_once()
+
+
+class FakeListener:
+    def __init__(self, results=(), events=None):
+        self.results = list(results)
+        self.calls = 0
+        self.events = events if events is not None else []
+
+    def __call__(self):
+        self.events.append("listen")
+        self.calls += 1
+        result = self.results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+
+@pytest.mark.parametrize("line", ["", "   "])
+def test_empty_enter_listens_and_answers_transcript(line):
+    conversation, _, output, _ = run([line, "/exit"], answers=["It is noon"], heard=["what time"])
+    assert conversation.asked == ["what time"]
+    assert "you (voice)> what time" in output
+    assert "nova> It is noon" in output
+
+
+def test_speech_stops_before_listening():
+    events = []
+    run(["", "/exit"], answers=["ok"], events=events, heard=["hi"])
+    assert events[events.index("listen") - 1] == "stop"
+
+
+def test_no_speech_returns_to_prompt_without_asking():
+    conversation, _, output, _ = run(["", "/exit"], heard=[""])
+    assert conversation.asked == []
+    assert any("[no speech detected]" in line for line in output)
+
+
+@pytest.mark.parametrize("error", [RecordingError("mic denied"), AIError("transcription failed")])
+def test_voice_errors_allow_retry(error):
+    conversation, _, output, _ = run(["", "", "/exit"], answers=["ok"], heard=[error, "retry"])
+    assert f"[error] {error}" in output
+    assert conversation.asked == ["retry"]
+
+
+def test_ctrl_c_while_listening_cancels():
+    conversation, _, output, _ = run(["", "/exit"], heard=[KeyboardInterrupt()])
+    assert "[cancelled]" in output
+    assert conversation.asked == []
+
+
+def test_typing_still_works_without_listening():
+    conversation, _, _, listener = run(["typed question", "/exit"], answers=["ok"])
+    assert conversation.asked == ["typed question"]
+    assert listener.calls == 0
