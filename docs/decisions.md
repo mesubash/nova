@@ -116,3 +116,15 @@ Server load varies over time; rerun the benchmark before changing models.
 **Latency measured, not estimated.** `scripts/measure_latency.py` replays questions generated with `say` as 16 kHz WAV through the real pipeline. Median total wait after releasing Talk: 3.40 s (2.70 to 4.35 s); transcription is the largest share. "Speech start" measures when `say` is launched, not when sound is first heard.
 
 **Rate limits are reported, not retried.** HTTP 429 is a client error and is shown to the user. On the free tier (15 requests per minute for `gemini-3.5-flash-lite`), a voice question uses two requests.
+
+## V1.1: Local transcription (2026-11-13)
+
+**mlx-whisper with `whisper-large-v3-turbo`, as an optional extra.** MLX runs Whisper on Apple Silicon's GPU. Installed with `pip install -e ".[local]"` and selected with `NOVA_TRANSCRIBER=local`; the import happens only on first use, so Gemini-only setups never load MLX.
+
+**Measured on the M4 with identical audio, back to back.** Local transcription: 1.04 s median (1.02 to 1.06 s) versus Gemini's 1.66 s (1.35 to 1.94 s). Total wait after releasing Talk: 2.14 s versus 2.85 s, with no rate-limit failures because each voice question uses one Gemini request instead of two. A spike with five synthetic sentences found tiny (0.04 s), small (0.23 s), and turbo (1.02 s) equally accurate on that small sample; turbo is the default because larger models are generally more robust to real voices and accents.
+
+**Gemini stays the default.** It needs no 1.6 GB download, it was more accurate on the test sample (local heard "leap year" as "league year" in 3 of 3 runs), and the packaged app does not include MLX.
+
+**Two guards against invented text.** Small and turbo transcribed pure noise as "Thank you." The recorder's silence check stops quiet audio before transcription, and segments Whisper rates as probably not speech (`no_speech_prob` of 0.6 or more) are dropped.
+
+**MLX is excluded from the app bundle.** PyInstaller finds imports anywhere in the code, including lazy ones, so `mlx` and `mlx_whisper` are excluded explicitly to keep the app small and its behaviour predictable.
