@@ -2,16 +2,33 @@
 
 import sys
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
+from nova.ai import GeminiClient
+from nova.config import ConfigError, load_config
+from nova.conversation import Conversation
+from nova.speech import Speaker
 from nova.ui.window import MainWindow
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    window = MainWindow()
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        QMessageBox.critical(None, "NOVA configuration error", str(exc))
+        return 1
+
+    client = GeminiClient(config)
+    speaker = Speaker()
+    window = MainWindow(Conversation(client, config.max_history_turns), speaker)
     window.show()
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        window.runner.shutdown()
+        speaker.stop()
+        client.close()
 
 
 if __name__ == "__main__":
