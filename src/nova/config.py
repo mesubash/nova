@@ -4,12 +4,14 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_HISTORY_TURNS = 10
 DEFAULT_MAX_RECORDING_SECONDS = 30.0
+DEFAULT_ALLOWED_APPS = ("Safari", "Notes", "Calendar", "Music", "Calculator", "TextEdit", "Finder")
 
 
 class ConfigError(Exception):
@@ -23,6 +25,8 @@ class Config:
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
     max_recording_seconds: float = DEFAULT_MAX_RECORDING_SECONDS
+    allowed_apps: tuple[str, ...] = DEFAULT_ALLOWED_APPS
+    search_folder: Path | None = None
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -45,6 +49,8 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         max_recording_seconds=_positive_float(
             env, "NOVA_MAX_RECORDING_SECONDS", DEFAULT_MAX_RECORDING_SECONDS
         ),
+        allowed_apps=_app_list(env, "NOVA_ALLOWED_APPS"),
+        search_folder=_optional_folder(env, "NOVA_SEARCH_FOLDER"),
     )
 
 
@@ -79,3 +85,20 @@ def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
     if value <= 0:
         raise ConfigError(f"{name} must be greater than 0, got {raw!r}.")
     return value
+
+
+def _app_list(env: Mapping[str, str], name: str) -> tuple[str, ...]:
+    raw = env.get(name, "").strip()
+    if not raw:
+        return DEFAULT_ALLOWED_APPS
+    return tuple(app.strip() for app in raw.split(",") if app.strip())
+
+
+def _optional_folder(env: Mapping[str, str], name: str) -> Path | None:
+    raw = env.get(name, "").strip()
+    if not raw:
+        return None
+    folder = Path(raw).expanduser()
+    if not folder.is_dir():
+        raise ConfigError(f"{name} must be an existing folder, got {raw!r}.")
+    return folder.resolve()

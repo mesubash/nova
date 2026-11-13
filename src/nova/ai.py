@@ -9,6 +9,7 @@ import httpx2
 from google import genai
 from google.genai import errors, types
 
+from nova.actions import ActionRequest
 from nova.config import Config
 
 Role = Literal["user", "assistant"]
@@ -21,7 +22,10 @@ _GEMINI_ROLES = {"user": "user", "assistant": "model"}
 SYSTEM_INSTRUCTION = (
     "You are NOVA, a personal voice assistant. Your replies are read aloud, so answer "
     "in short, natural spoken sentences, usually one to three. Do not use markdown, "
-    "bullet points, tables, emoji, or code blocks unless the user asks for them."
+    "bullet points, tables, emoji, or code blocks unless the user asks for them. "
+    "You can open allowed apps, open web pages, and search the user's approved folder "
+    "by file name with the provided functions. Call a function only when the user "
+    "clearly asks for that action."
 )
 TRANSCRIBE_PROMPT = (
     "Transcribe the speech in this audio exactly as spoken. Reply with only the "
@@ -53,19 +57,27 @@ class GeminiClient:
     ) -> None:
         self._model = config.model
         self._sleep = sleep
-        self._chat_config = types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION)
+        self._chat_config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            tools=[_action_tool(config.allowed_apps)],
+        )
         self._transcribe_config = types.GenerateContentConfig(temperature=0)
         self._client = client or genai.Client(
             api_key=config.api_key,
             http_options=types.HttpOptions(timeout=int(config.request_timeout_seconds * 1000)),
         )
 
-    def reply(self, messages: Sequence[Message]) -> str:
+    def reply(self, messages: Sequence[Message]) -> str | ActionRequest:
         if not messages:
             raise ValueError("messages must not be empty")
 
         contents = [_to_content(message) for message in messages]
-        text = self._with_retries(contents, self._chat_config)
+        response = self._with_retries(contents, self._chat_config)
+        calls = response.function_calls or []
+        if calls:
+            call = calls[0]
+            return ActionRequest(call.name or "", call.args if call.args is not None else {})
+        text = (response.text or "").strip()
         if not text:
             raise AIError("Gemini returned an empty response.")
         return text
@@ -84,7 +96,8 @@ class GeminiClient:
                 ],
             )
         ]
-        text = self._with_retries(contents, self._transcribe_config)
+        response = self._with_retries(contents, self._transcribe_config)
+        text = (response.text or "").strip()
         return "" if text.lower() == NO_SPEECH else text
 
     def close(self) -> None:
@@ -92,7 +105,7 @@ class GeminiClient:
 
     def _with_retries(
         self, contents: list[types.Content], config: types.GenerateContentConfig
-    ) -> str:
+    ) -> types.GenerateContentResponse:
         attempt = 1
         while True:
             try:
@@ -105,7 +118,7 @@ class GeminiClient:
 
     def _request_once(
         self, contents: list[types.Content], config: types.GenerateContentConfig
-    ) -> str:
+    ) -> types.GenerateContentResponse:
         try:
             response = self._client.models.generate_content(
                 model=self._model, contents=contents, config=config
@@ -122,11 +135,50 @@ class GeminiClient:
                 retryable=exc.code in _RETRYABLE_STATUS_CODES,
             ) from exc
 
-        return (response.text or "").strip()
+        return response
 
 
 def _to_content(message: Message) -> types.Content:
     return types.Content(
         role=_GEMINI_ROLES[message.role],
         parts=[types.Part(text=message.text)],
+    )
+
+
+def _action_tool(allowed_apps: tuple[str, ...]) -> types.Tool:
+    """Describe NOVA's actions to Gemini. Descriptions guide the model; validation decides."""
+    apps = ", ".join(allowed_apps) or "none"
+
+    def declaration(name: str, description: str, param: str, param_description: str) -> dict:
+        return {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": {param: {"type": "string", "description": param_description}},
+                "required": [param],
+            },
+        }
+
+    return types.Tool(
+        function_declarations=[
+            declaration(
+                "open_app",
+                f"Open an app on the user's Mac. Allowed apps: {apps}.",
+                "app",
+                "The app name, for example Safari.",
+            ),
+            declaration(
+                "open_url",
+                "Open a web page in the user's default browser.",
+                "url",
+                "A full http or https address.",
+            ),
+            declaration(
+                "search_files",
+                "Find files in the user's approved folder whose names contain the query.",
+                "query",
+                "Part of a file name, without any folder path.",
+            ),
+        ]
     )

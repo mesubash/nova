@@ -3,6 +3,7 @@ import threading
 import pytest
 from PySide6.QtCore import Qt
 
+from nova.actions import CANCELLED, ActionPolicy, ActionRequest, ActionResult, OpenApp
 from nova.ai import AIError
 from nova.speech import RecordingError, SpeechError
 from nova.ui.window import MainWindow, State
@@ -13,6 +14,7 @@ class FakeConversation:
         self.answers = list(answers)
         self.asked = []
         self.gate = gate
+        self.completed = []
 
     def ask(self, text):
         if self.gate:
@@ -22,6 +24,9 @@ class FakeConversation:
         if isinstance(answer, BaseException):
             raise answer
         return answer
+
+    def complete_action(self, outcome):
+        self.completed.append(outcome)
 
 
 class FakeSpeaker:
@@ -84,13 +89,19 @@ def make_window(qtbot):
         transcriber=None,
         gate=None,
         min_hold_seconds=0.0,
+        policy=None,
+        confirm=None,
+        execute_action=None,
     ):
         window = MainWindow(
             conversation or FakeConversation(answers, gate),
             speaker or FakeSpeaker(),
             recorder or FakeRecorder(),
             transcriber or FakeTranscriber(),
+            policy or ActionPolicy(("Safari",), None),
             min_hold_seconds=min_hold_seconds,
+            confirm=confirm,
+            execute_action=execute_action,
         )
         qtbot.addWidget(window)
         windows.append(window)
@@ -332,3 +343,75 @@ def test_closing_while_recording_stops_everything(qtbot, make_window):
     assert speaker.stops >= 2  # once before recording, once on close
     qtbot.wait(200)  # the recording is released and its late result dropped
     assert transcriber.received == []
+
+
+# Desktop actions
+
+
+class FakeExecute:
+    def __init__(self, result=None):
+        self.result = result or ActionResult(True, "Done.")
+        self.actions = []
+
+    def __call__(self, action):
+        self.actions.append(action)
+        return self.result
+
+
+def test_confirmed_action_runs_and_is_reported(qtbot, make_window):
+    execute_action = FakeExecute(ActionResult(True, "Opened Safari."))
+    conversation = FakeConversation([ActionRequest("open_app", {"app": "safari"})])
+    speaker = FakeSpeaker()
+    window = make_window(
+        conversation=conversation,
+        speaker=speaker,
+        confirm=lambda action: True,
+        execute_action=execute_action,
+    )
+    ask(qtbot, window, "open safari")
+    assert execute_action.actions == [OpenApp("Safari")]
+    assert "NOVA: Opened Safari." in text_of(window)
+    assert conversation.completed == ["Opened Safari."]
+    assert speaker.spoken == ["Opened Safari."]
+
+
+def test_declined_action_executes_nothing(qtbot, make_window):
+    execute_action = FakeExecute()
+    conversation = FakeConversation([ActionRequest("open_app", {"app": "Safari"})])
+    window = make_window(
+        conversation=conversation,
+        confirm=lambda action: False,
+        execute_action=execute_action,
+    )
+    ask(qtbot, window, "open safari")
+    assert execute_action.actions == []
+    assert CANCELLED.message in text_of(window)
+    assert conversation.completed == [CANCELLED.message]
+
+
+def test_disallowed_app_is_rejected_without_asking(qtbot, make_window):
+    asked = []
+    execute_action = FakeExecute()
+    window = make_window(
+        conversation=FakeConversation([ActionRequest("open_app", {"app": "Terminal"})]),
+        confirm=lambda action: asked.append(action) or True,
+        execute_action=execute_action,
+    )
+    ask(qtbot, window, "open terminal")
+    assert asked == []
+    assert execute_action.actions == []
+    assert "can't do that" in text_of(window)
+
+
+def test_search_runs_without_confirmation_and_lists_results(qtbot, make_window, tmp_path):
+    asked = []
+    execute_action = FakeExecute(ActionResult(True, "Found 1 file.", ("notes/plan.txt",)))
+    window = make_window(
+        conversation=FakeConversation([ActionRequest("search_files", {"query": "plan"})]),
+        policy=ActionPolicy((), tmp_path),
+        confirm=lambda action: asked.append(action) or True,
+        execute_action=execute_action,
+    )
+    ask(qtbot, window, "find my plan")
+    assert asked == []
+    assert "• notes/plan.txt" in text_of(window)

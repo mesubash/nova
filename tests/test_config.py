@@ -66,3 +66,24 @@ def test_repr_hides_api_key():
 def test_invalid_recording_limit_raises(raw):
     with pytest.raises(ConfigError, match="NOVA_MAX_RECORDING_SECONDS"):
         load_config({**VALID_ENV, "NOVA_MAX_RECORDING_SECONDS": raw})
+
+
+def test_actions_default_to_builtin_apps_and_no_search_folder():
+    config = load_config(VALID_ENV)
+    assert "Safari" in config.allowed_apps
+    assert config.search_folder is None
+
+
+def test_allowed_apps_are_parsed_from_a_comma_list():
+    config = load_config({**VALID_ENV, "NOVA_ALLOWED_APPS": " Safari, Notes ,, "})
+    assert config.allowed_apps == ("Safari", "Notes")
+
+
+def test_search_folder_is_resolved(tmp_path):
+    config = load_config({**VALID_ENV, "NOVA_SEARCH_FOLDER": str(tmp_path)})
+    assert config.search_folder == tmp_path.resolve()
+
+
+def test_missing_search_folder_is_a_config_error(tmp_path):
+    with pytest.raises(ConfigError, match="NOVA_SEARCH_FOLDER"):
+        load_config({**VALID_ENV, "NOVA_SEARCH_FOLDER": str(tmp_path / "missing")})

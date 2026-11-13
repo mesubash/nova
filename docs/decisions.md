@@ -70,3 +70,19 @@ Server load varies over time; rerun the benchmark before changing models.
 **Hold-to-talk reuses the terminal `Recorder`.** The window passes `threading.Event.wait` as the stop function; releasing the button sets the event. Presses shorter than 0.3 s are cancelled with a hint.
 
 **One `set_state()` controls status text and enabled controls**, so the controls always match what NOVA is doing. Speaking is detected by polling the `say` process every 200 ms with a `QTimer`.
+
+## V0.5: Controlled desktop actions (2026-11-13)
+
+**The model proposes; the application decides.** Gemini function calling returns a structured `ActionRequest`, treated as untrusted input. `validate()` turns it into a typed `OpenApp`, `OpenUrl`, or `SearchFiles`, or rejects it. `execute()` only accepts those validated types, so raw model output can never reach `subprocess`.
+
+**Validation rules.** Only three actions exist. Each requires exactly one non-empty string argument without control characters and with a bounded length. Apps must match `NOVA_ALLOWED_APPS` (case-insensitive; the configured spelling is executed). URLs must be http or https with a host and no spaces. Search accepts only a file-name fragment (no `/` or `\`) inside `NOVA_SEARCH_FOLDER`.
+
+**Folder boundary after resolution.** Search does not enter symlinked folders, and every match is resolved and checked to remain inside the approved folder. Hidden files are skipped; at most 20,000 files are scanned and 20 results returned.
+
+**No shell.** `open` is called with an argument list. URLs always begin with `http`, so they cannot be read as options.
+
+**Confirmation for every action with side effects, every time.** Opening apps and URLs always asks, defaulting to No; read-only search does not ask. Session-wide "always allow" and a trusted-app list were considered and deferred: voice transcription can mishear, and explicit confirmation is the simplest guarantee for this release.
+
+**Action results are not sent back to the model.** The outcome message is already exact, it avoids a second request, and file names from disk never reach Gemini, which removes a prompt-injection path. Trade-off: the model cannot reason about search results.
+
+**History records what actually happened.** A proposed action is added to the conversation only after its outcome (opened, failed, rejected, or cancelled) is known. One action per turn.

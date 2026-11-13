@@ -1,5 +1,6 @@
 import pytest
 
+from nova.actions import ActionRequest
 from nova.ai import AIError, Message
 from nova.conversation import Conversation
 
@@ -72,3 +73,31 @@ def test_empty_input_is_rejected_without_calling_model(text):
 def test_max_turns_must_be_positive():
     with pytest.raises(ValueError):
         Conversation(FakeResponder(), max_turns=0)
+
+
+def test_action_is_recorded_only_after_its_outcome():
+    request = ActionRequest("open_app", {"app": "Safari"})
+    conversation = Conversation(FakeResponder([request]), max_turns=5)
+    assert conversation.ask("open safari") == request
+    assert conversation.history == ()
+
+    conversation.complete_action("Opened Safari.")
+    assert conversation.history == (
+        Message("user", "open safari"),
+        Message("assistant", "Opened Safari."),
+    )
+
+
+def test_complete_without_pending_action_does_nothing():
+    conversation = Conversation(FakeResponder(), max_turns=5)
+    conversation.complete_action("stray")
+    assert conversation.history == ()
+
+
+def test_new_question_discards_unfinished_action():
+    responder = FakeResponder([ActionRequest("open_app", {}), "hi"])
+    conversation = Conversation(responder, max_turns=5)
+    conversation.ask("open something")
+    conversation.ask("hello")
+    conversation.complete_action("late outcome")
+    assert conversation.history == (Message("user", "hello"), Message("assistant", "hi"))
