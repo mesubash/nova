@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Credentials
+.env
+.env.*
+!.env.example
+
+# Build output
+build/
+dist/
+
+# Testing and tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Private runtime data
+data/
+recordings/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*-wal
+*-shm
+*-journal
+
+# macOS
+.DS_Store

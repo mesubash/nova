@@ -1,0 +1,1 @@
+"""NOVA personal desktop assistant."""

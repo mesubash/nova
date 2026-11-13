@@ -1,35 +1,29 @@
 # NOVA
 
-A personal AI voice assistant built with Python and Google Gemini, starting on macOS.
+A macOS-first personal AI voice assistant built with Python and Google Gemini.
 
-## Project Status
+## Status
 
-Early development. Features will be introduced through small, working milestones.
+Planning and initial setup. Assistant functionality is not implemented yet.
 
-## Planned Features
+## Planned capabilities
 
-- Voice input and spoken responses
-- Context-aware conversations
-- Controlled desktop actions
-- Persistent personal notes
+- Context-aware text and voice conversations
+- Spoken responses and push-to-talk input
 - A lightweight desktop interface
+- Controlled desktop actions
+- Persistent, searchable personal notes
 
-## Technology
+## Development
 
-- Python
-- Google Gemini API
-- Speech recognition
-- macOS text-to-speech
-- PySide6 and SQLite in later milestones
+NOVA grows through small, working milestones. See [the development plan](docs/PLAN.md) for scope, technology decisions, and completion criteria.
 
-## Development Approach
+Application code will live in `src/nova/` and automated tests in `tests/`. Dependency and run instructions will be added with the first implementation.
 
-Build incrementally, understand each component, and prioritize reliability and user control.
+## Configuration and privacy
 
-## Getting Started
-
-Setup instructions will be added with the first working implementation.
+Copy `.env.example` to `.env` when implementing local configuration. Supply your own API key and chosen model. Never commit credentials or personal runtime data. Planned online AI and speech services require internet access and may receive conversation text or audio.
 
 ## License
 
-MIT
+MIT. See `LICENSE` in the repository.
