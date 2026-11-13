@@ -39,9 +39,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         request_timeout_seconds=_positive_float(
             env, "NOVA_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT_SECONDS
         ),
-        max_history_turns=_positive_int(
-            env, "NOVA_MAX_HISTORY_TURNS", DEFAULT_MAX_HISTORY_TURNS
-        ),
+        max_history_turns=_positive_int(env, "NOVA_MAX_HISTORY_TURNS", DEFAULT_MAX_HISTORY_TURNS),
     )
 
 
