@@ -8,6 +8,7 @@ from nova.ai import AIError
 from nova.config import Config, ConfigError
 from nova.speech import RecordingError, SpeechError
 from nova.storage import StorageError
+from nova.transcription import TranscriptionError
 
 
 class FakeConversation:
@@ -286,3 +287,11 @@ def test_unavailable_notes_do_not_stop_startup(monkeypatch, capsys, tmp_path):
     config = Config(api_key="k", model="m", data_dir=tmp_path)
     assert app._open_notes(config) is None
     assert "disk full" in capsys.readouterr().err
+
+
+def test_local_transcription_error_allows_retry():
+    conversation, _, output, _ = run(
+        ["", "", "/exit"], answers=["ok"], heard=[TranscriptionError("model missing"), "retry"]
+    )
+    assert "[error] model missing" in output
+    assert conversation.asked == ["retry"]

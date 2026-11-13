@@ -13,6 +13,7 @@ from pathlib import Path
 from nova.ai import AIError, GeminiClient, Message
 from nova.config import load_config
 from nova.speech import Speaker
+from nova.transcription import TranscriptionError, make_transcriber
 
 QUESTIONS = [
     "What is the capital of Nepal?",
@@ -34,6 +35,7 @@ def synthesize(text: str, path: Path) -> bytes:
 def main() -> None:
     config = load_config()
     client = GeminiClient(config)
+    transcribe = make_transcriber(config, client)
     speaker = Speaker()
     timings: dict[str, list[float]] = {
         "Transcription": [],
@@ -49,17 +51,18 @@ def main() -> None:
                 question: synthesize(question, Path(folder) / f"q{index}.wav")
                 for index, question in enumerate(QUESTIONS)
             }
+            transcribe(next(iter(audio.values())))  # untimed warm-up; loads a local model
             for run in range(1, RUNS_PER_QUESTION + 1):
                 for question, wav in audio.items():
                     try:
                         start = time.perf_counter()
-                        transcript = client.transcribe(wav)
+                        transcript = transcribe(wav)
                         transcribed = time.perf_counter()
                         answer = client.reply([Message("user", transcript or question)])
                         answered = time.perf_counter()
                         speaker.speak(answer)
                         speaking = time.perf_counter()
-                    except AIError as exc:
+                    except (AIError, TranscriptionError) as exc:
                         failures += 1
                         print(f"run {run}: FAILED: {exc}")
                         continue
@@ -77,7 +80,10 @@ def main() -> None:
 
     measured = len(timings["Transcription"])
     print()
-    print(f"Model: {config.model} | measured runs: {measured} | failed runs: {failures}")
+    print(
+        f"Model: {config.model} | transcriber: {config.transcriber} | "
+        f"measured runs: {measured} | failed runs: {failures}"
+    )
     print()
     print("| Step | Median | Fastest | Slowest |")
     print("| --- | --- | --- | --- |")

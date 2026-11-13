@@ -17,6 +17,7 @@ from nova.config import (
 from nova.conversation import Conversation
 from nova.speech import Recorder, Speaker
 from nova.storage import NOTES_FILENAME, NoteStore, StorageError
+from nova.transcription import make_transcriber
 from nova.ui.window import MainWindow
 
 
@@ -56,7 +57,7 @@ def main() -> int:
     recorder = Recorder(config.max_recording_seconds)
     conversation = Conversation(client, config.max_history_turns)
     policy = ActionPolicy(config.allowed_apps, config.search_folder, _open_notes(config))
-    window = MainWindow(conversation, speaker, recorder, client.transcribe, policy)
+    window = MainWindow(conversation, speaker, recorder, make_transcriber(config, client), policy)
     window.show()
     try:
         return app.exec()
