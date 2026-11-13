@@ -6,9 +6,9 @@ from google.genai import errors
 
 from nova.ai import (
     MAX_ATTEMPTS,
+    NO_SPEECH,
     RETRY_DELAY_SECONDS,
     SYSTEM_INSTRUCTION,
-    NO_SPEECH,
     TRANSCRIBE_PROMPT,
     AIError,
     GeminiClient,
