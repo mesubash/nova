@@ -9,6 +9,7 @@ from dotenv import find_dotenv, load_dotenv
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_HISTORY_TURNS = 10
+DEFAULT_MAX_RECORDING_SECONDS = 30.0
 
 
 class ConfigError(Exception):
@@ -21,6 +22,7 @@ class Config:
     model: str
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     max_history_turns: int = DEFAULT_MAX_HISTORY_TURNS
+    max_recording_seconds: float = DEFAULT_MAX_RECORDING_SECONDS
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -40,6 +42,9 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
             env, "NOVA_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT_SECONDS
         ),
         max_history_turns=_positive_int(env, "NOVA_MAX_HISTORY_TURNS", DEFAULT_MAX_HISTORY_TURNS),
+        max_recording_seconds=_positive_float(
+            env, "NOVA_MAX_RECORDING_SECONDS", DEFAULT_MAX_RECORDING_SECONDS
+        ),
     )
 
 

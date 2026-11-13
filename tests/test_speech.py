@@ -1,8 +1,20 @@
+import io
 import subprocess
+import wave
 
+import numpy as np
 import pytest
+import sounddevice as sd
 
-from nova.speech import Speaker, SpeechError, to_speakable
+from nova.speech import (
+    SAMPLE_RATE,
+    Recorder,
+    RecordingError,
+    Speaker,
+    SpeechError,
+    to_speakable,
+    to_wav,
+)
 
 
 class FakeStdin:
@@ -139,3 +151,87 @@ def test_broken_pipe_raises_speech_error_and_cleans_up():
     with pytest.raises(SpeechError, match="could not send"):
         speaker.speak("hello")
     assert processes[0].terminated
+
+
+class FakeStream:
+    """Feeds prepared audio chunks to the callback when the stream opens."""
+
+    def __init__(self, chunks, **kwargs):
+        self.chunks = chunks
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        callback = self.kwargs["callback"]
+        for chunk in self.chunks:
+            try:
+                callback(chunk, len(chunk), None, None)
+            except sd.CallbackStop:
+                break
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+def tone(seconds, amplitude=0.3):
+    t = np.arange(int(seconds * SAMPLE_RATE)) / SAMPLE_RATE
+    return (amplitude * np.sin(2 * np.pi * 440 * t)).astype(np.float32).reshape(-1, 1)
+
+
+def make_recorder(chunks, max_seconds=5.0, open_error=None):
+    streams = []
+
+    def factory(**kwargs):
+        if open_error:
+            raise open_error
+        stream = FakeStream(chunks, **kwargs)
+        streams.append(stream)
+        return stream
+
+    return Recorder(max_seconds, stream_factory=factory), streams
+
+
+def wav_info(data):
+    with wave.open(io.BytesIO(data)) as wav:
+        return wav.getnchannels(), wav.getframerate(), wav.getnframes()
+
+
+def test_record_returns_mono_16khz_wav():
+    recorder, streams = make_recorder([tone(1.0)])
+    waits = []
+    data = recorder.record(waits.append)
+    assert wav_info(data) == (1, SAMPLE_RATE, SAMPLE_RATE)
+    assert waits == [5.0]
+    assert streams[0].kwargs["channels"] == 1
+
+
+def test_recording_is_cut_at_max_duration():
+    recorder, _ = make_recorder([tone(1.0)] * 5, max_seconds=2.0)
+    data = recorder.record(lambda timeout: None)
+    assert wav_info(data)[2] == 2 * SAMPLE_RATE
+
+
+def test_quiet_recording_raises_no_speech():
+    recorder, _ = make_recorder([tone(1.0, amplitude=0.001)])
+    with pytest.raises(RecordingError, match="No speech"):
+        recorder.record(lambda timeout: None)
+
+
+@pytest.mark.parametrize("chunks", [[], [np.zeros((SAMPLE_RATE, 1), np.float32)]])
+def test_no_signal_points_to_microphone_permission(chunks):
+    recorder, _ = make_recorder(chunks)
+    with pytest.raises(RecordingError, match="Privacy & Security"):
+        recorder.record(lambda timeout: None)
+
+
+def test_microphone_open_failure_raises_recording_error():
+    recorder, _ = make_recorder([], open_error=sd.PortAudioError("no input device"))
+    with pytest.raises(RecordingError, match="Could not open"):
+        recorder.record(lambda timeout: None)
+
+
+def test_to_wav_clips_out_of_range_samples():
+    data = to_wav(np.array([2.0, -2.0], np.float32))
+    with wave.open(io.BytesIO(data)) as wav:
+        frames = np.frombuffer(wav.readframes(2), "<i2")
+    assert frames.tolist() == [32767, -32767]
