@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: Planning; no assistant features implemented yet.
+Status: V0.4 complete (desktop interface). V0.5 (controlled desktop actions) is next.
 
 ## Purpose
 
@@ -129,7 +129,7 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [ ] V0.1 Foundation and text conversation
 - [ ] V0.2 Spoken output
 - [ ] V0.3 Voice input
-- [ ] V0.4 Small desktop interface
+- [x] V0.4 Small desktop interface
 - [ ] V0.5 Controlled desktop actions
 - [ ] V0.6 Persistent notes
 - [ ] V1.0 Portfolio release
@@ -150,4 +150,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-Implement V0.1: create the Python 3.12 virtual environment, add `pyproject.toml`, install only required dependencies with `pip install -e .`, create `docs/decisions.md` with the first decisions, and make one typed Gemini conversation work. Do not begin with microphone or GUI troubleshooting.
+Implement V0.5: Gemini function calling for opening allowlisted apps, validated URLs, and filename search in an approved folder, with application-side validation and confirmation before side effects.

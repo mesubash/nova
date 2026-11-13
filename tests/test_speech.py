@@ -235,3 +235,15 @@ def test_to_wav_clips_out_of_range_samples():
     with wave.open(io.BytesIO(data)) as wav:
         frames = np.frombuffer(wav.readframes(2), "<i2")
     assert frames.tolist() == [32767, -32767]
+
+
+def test_is_speaking_follows_process_state():
+    speaker, processes = make_speaker()
+    assert not speaker.is_speaking
+    speaker.speak("hello")
+    assert speaker.is_speaking
+    processes[0].running = False
+    assert not speaker.is_speaking
+    speaker.speak("again")
+    speaker.stop()
+    assert not speaker.is_speaking
