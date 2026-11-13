@@ -181,7 +181,16 @@ def test_chat_declares_actions_and_lists_allowed_apps():
     client.reply(HISTORY)
     tool = fake.models.generate_content.call_args.kwargs["config"].tools[0]
     names = [declaration.name for declaration in tool.function_declarations]
-    assert names == ["open_app", "open_url", "search_files"]
+    assert names == [
+        "open_app",
+        "open_url",
+        "search_files",
+        "save_note",
+        "list_notes",
+        "search_notes",
+        "edit_note",
+        "delete_note",
+    ]
     assert "Safari" in tool.function_declarations[0].description
 
 
@@ -189,3 +198,12 @@ def test_transcription_declares_no_actions():
     client, fake, _ = make_client(return_value=fake_response(text="hello"))
     client.transcribe(WAV)
     assert fake.models.generate_content.call_args.kwargs["config"].tools is None
+
+
+def test_note_declarations_have_the_right_parameters():
+    client, fake, _ = make_client(return_value=fake_response(text="ok"))
+    client.reply(HISTORY)
+    tool = fake.models.generate_content.call_args.kwargs["config"].tools[0]
+    by_name = {declaration.name: declaration for declaration in tool.function_declarations}
+    assert by_name["list_notes"].parameters is None
+    assert by_name["edit_note"].parameters.required == ["id", "text"]

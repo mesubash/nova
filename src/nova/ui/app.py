@@ -6,10 +6,20 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from nova.actions import ActionPolicy
 from nova.ai import GeminiClient
-from nova.config import ConfigError, load_config
+from nova.config import Config, ConfigError, load_config
 from nova.conversation import Conversation
 from nova.speech import Recorder, Speaker
+from nova.storage import NOTES_FILENAME, NoteStore, StorageError
 from nova.ui.window import MainWindow
+
+
+def _open_notes(config: Config) -> NoteStore | None:
+    """Open the notes database; if that fails, keep running with notes disabled."""
+    try:
+        return NoteStore(config.data_dir / NOTES_FILENAME)
+    except StorageError as exc:
+        QMessageBox.warning(None, "NOVA notes unavailable", str(exc))
+        return None
 
 
 def main() -> int:
@@ -24,7 +34,7 @@ def main() -> int:
     speaker = Speaker()
     recorder = Recorder(config.max_recording_seconds)
     conversation = Conversation(client, config.max_history_turns)
-    policy = ActionPolicy(config.allowed_apps, config.search_folder)
+    policy = ActionPolicy(config.allowed_apps, config.search_folder, _open_notes(config))
     window = MainWindow(conversation, speaker, recorder, client.transcribe, policy)
     window.show()
     try:

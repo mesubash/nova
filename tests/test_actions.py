@@ -7,14 +7,20 @@ from nova.actions import (
     ActionRejected,
     ActionRequest,
     ActionResult,
+    DeleteNote,
+    EditNote,
+    ListNotes,
     OpenApp,
     OpenUrl,
+    SaveNote,
     SearchFiles,
+    SearchNotes,
     execute,
     validate,
 )
 from nova.actions.execute import search_files
 from nova.actions.flow import CANCELLED, run_action
+from nova.storage import NoteStore
 
 
 @pytest.fixture
@@ -261,3 +267,114 @@ def test_read_only_search_runs_without_confirmation(policy):
     result = run_action(ActionRequest("search_files", {"query": "budget"}), policy, confirm)
     assert asked == []
     assert result.details == ("budget.xlsx",)
+
+
+# Notes
+
+
+@pytest.fixture
+def notes(tmp_path):
+    return NoteStore(tmp_path / "notes.db")
+
+
+@pytest.fixture
+def notes_policy(notes):
+    return ActionPolicy(allowed_apps=(), search_folder=None, notes=notes)
+
+
+def test_save_note_needs_confirmation_and_previews_text(notes_policy):
+    action = check("save_note", {"text": "Buy milk"}, notes_policy)
+    assert isinstance(action, SaveNote)
+    assert action.requires_confirmation
+    assert "Buy milk" in action.describe()
+
+
+def test_listing_and_searching_notes_are_read_only(notes_policy):
+    assert isinstance(check("list_notes", {}, notes_policy), ListNotes)
+    assert not check("list_notes", {}, notes_policy).requires_confirmation
+    assert isinstance(check("search_notes", {"query": "milk"}, notes_policy), SearchNotes)
+    assert not check("search_notes", {"query": "milk"}, notes_policy).requires_confirmation
+
+
+def test_list_notes_takes_no_arguments(notes_policy):
+    with pytest.raises(ActionRejected, match="no arguments"):
+        check("list_notes", {"limit": 5}, notes_policy)
+
+
+@pytest.mark.parametrize("raw_id", [1, 1.0, "1", "#1", " 1 "])
+def test_note_ids_accept_whole_numbers_in_common_forms(notes_policy, notes, raw_id):
+    notes.add("Call mum")
+    action = check("delete_note", {"id": raw_id}, notes_policy)
+    assert action == DeleteNote(1, "Call mum", notes)
+    assert "Call mum" in action.describe()
+
+
+@pytest.mark.parametrize("raw_id", [True, 0, -1, 1.5, "abc", "²", None, [1]])
+def test_invalid_note_ids_are_rejected(notes_policy, notes, raw_id):
+    notes.add("x")
+    with pytest.raises(ActionRejected):
+        check("delete_note", {"id": raw_id}, notes_policy)
+
+
+def test_missing_note_is_rejected_before_any_confirmation(notes_policy):
+    with pytest.raises(ActionRejected, match="#9"):
+        check("edit_note", {"id": 9, "text": "new"}, notes_policy)
+
+
+def test_edit_preview_shows_old_and_new_text(notes_policy, notes):
+    notes.add("Call mum")
+    action = check("edit_note", {"id": 1, "text": "Call mum on Sunday"}, notes_policy)
+    assert isinstance(action, EditNote)
+    assert action.requires_confirmation
+    assert '"Call mum"' in action.describe()
+    assert "Sunday" in action.describe()
+
+
+def test_note_actions_are_rejected_when_notes_are_unavailable(policy):
+    with pytest.raises(ActionRejected, match="unavailable"):
+        check("list_notes", {}, policy)
+
+
+def test_note_actions_execute_against_the_store(notes_policy, notes):
+    assert execute(check("save_note", {"text": "Buy milk"}, notes_policy)).message == (
+        "Saved note #1."
+    )
+    execute(check("save_note", {"text": "Call dentist"}, notes_policy))
+
+    listed = execute(check("list_notes", {}, notes_policy))
+    assert len(listed.details) == 2
+    assert "Call dentist" in listed.details[0]
+
+    found = execute(check("search_notes", {"query": "milk"}, notes_policy))
+    assert len(found.details) == 1
+    assert "Buy milk" in found.details[0]
+
+    assert execute(check("edit_note", {"id": 1, "text": "Buy oat milk"}, notes_policy)).ok
+    assert notes.get(1).text == "Buy oat milk"
+
+    assert execute(check("delete_note", {"id": 2}, notes_policy)).message == "Deleted note #2."
+    assert [note.id for note in notes.recent()] == [1]
+
+
+def test_empty_notes_list_says_so(notes_policy):
+    assert execute(check("list_notes", {}, notes_policy)).message == "You have no notes yet."
+
+
+def test_storage_failure_is_reported_not_raised(notes_policy, tmp_path):
+    action = check("save_note", {"text": "x"}, notes_policy)
+    (tmp_path / "notes.db").chmod(0o444)
+    try:
+        result = execute(action)
+    finally:
+        (tmp_path / "notes.db").chmod(0o600)
+    assert not result.ok
+    assert "notes database" in result.message
+
+
+def test_declined_delete_keeps_the_note(notes_policy, notes):
+    notes.add("keep me")
+    result = run_action(
+        ActionRequest("delete_note", {"id": 1}), notes_policy, confirm=lambda action: False
+    )
+    assert result == CANCELLED
+    assert notes.get(1).text == "keep me"

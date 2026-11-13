@@ -7,9 +7,10 @@ from collections.abc import Callable
 from nova import __version__
 from nova.actions import Action, ActionPolicy, ActionRequest, ActionResult, execute, run_action
 from nova.ai import AIError, GeminiClient
-from nova.config import ConfigError, load_config
+from nova.config import Config, ConfigError, load_config
 from nova.conversation import Conversation
 from nova.speech import Recorder, RecordingError, Speaker, SpeechError
+from nova.storage import NOTES_FILENAME, NoteStore, StorageError
 
 EXIT_COMMAND = "/exit"
 STOP_COMMAND = "/stop"
@@ -123,6 +124,15 @@ def wait_for_enter(timeout: float) -> None:
         sys.stdin.readline()
 
 
+def _open_notes(config: Config) -> NoteStore | None:
+    """Open the notes database; if that fails, keep running with notes disabled."""
+    try:
+        return NoteStore(config.data_dir / NOTES_FILENAME)
+    except StorageError as exc:
+        print(f"[notes unavailable] {exc}", file=sys.stderr)
+        return None
+
+
 def main() -> int:
     try:
         config = load_config()
@@ -133,7 +143,7 @@ def main() -> int:
     client = GeminiClient(config)
     speaker = Speaker()
     recorder = Recorder(config.max_recording_seconds)
-    policy = ActionPolicy(config.allowed_apps, config.search_folder)
+    policy = ActionPolicy(config.allowed_apps, config.search_folder, _open_notes(config))
 
     def listen() -> str:
         print(
