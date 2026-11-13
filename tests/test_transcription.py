@@ -107,3 +107,9 @@ def test_make_transcriber_uses_gemini_by_default():
 def test_make_transcriber_uses_local_model_when_configured():
     config = Config(api_key="k", model="m", transcriber="local", local_model="some/model")
     assert isinstance(make_transcriber(config, Mock()), LocalTranscriber)
+
+
+def test_local_transcriber_language_can_be_chosen():
+    whisper = FakeWhisper({"text": "नमस्ते", "segments": []})
+    LocalTranscriber("m", whisper=whisper, language="ne")(to_wav(tone()))
+    assert whisper.calls[0][1]["language"] == "ne"

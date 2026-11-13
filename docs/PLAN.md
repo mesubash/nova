@@ -98,6 +98,12 @@ Transcribe voice questions on the Mac with Whisper running on Apple's MLX framew
 
 Complete when local transcription can be selected without code changes; latency and accuracy are measured against Gemini with the same audio and recorded; silence and noise do not produce invented text; a missing or failed model gives a clear error and typed input still works; tests use a fake model; and the documentation states the model size, the one-time download, and that local transcription keeps audio on the Mac.
 
+### V1.3 — Nepali and English
+
+Let the user speak and type in Nepali, English, or a mix, and answer in the same language. Measure Nepali transcription on the user's own voice before choosing a backend, check which macOS voices can read Nepali text, and fall back clearly (text without speech) when no suitable voice exists.
+
+Complete when Nepali and mixed questions are transcribed with measured accuracy on record; NOVA answers in the language of the question; spoken output uses a suitable voice for Devanagari text or explains why it is silent; actions and notes work with Nepali text; tests cover language and voice selection; and the documentation states the measured results and limits.
+
 ## Application design
 
 Start with one package and a small entry point. Introduce modules only when their milestones begin:

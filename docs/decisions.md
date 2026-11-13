@@ -140,3 +140,17 @@ Server load varies over time; rerun the benchmark before changing models.
 **Transcriber decided by a rule fixed before measuring.** Local would be recommended if its word error rate was no more than 2 points worse than Gemini's on the developer's own voice. Measured on 15 phrases: Gemini 6.1% WER (11 of 15 exact), local Whisper large-v3-turbo 9.8% (9 of 15 exact). Gemini remains the default and the recommendation; local remains an option for privacy, speed (1.09 s median), and lower API usage. Gemini's 3.90 s median in this run includes rate-limit waits. Results: `docs/transcription-results.md`.
 
 **A first recording session was discarded as invalid.** It produced 74.6% and 110.9% word error rates, inconsistent with earlier measurements. Recording lengths and order were checked to rule out a software fault, the cause was identified as recording conditions, and the phrases were re-recorded before applying the rule.
+
+## V1.3: Nepali and English (2026-11-13)
+
+**Measured before building.** Nepali phrases (12, including two code-mixed sentences) were recorded in the developer's voice and transcribed by both backends. Local Whisper (large-v3-turbo, told the language is Nepali) reached 86.2% WER and 47.2% CER with no phrase exactly right, so local transcription is refused for Nepali with a configuration error.
+
+**Gemini guessed the wrong language for commands.** With the original prompt, plain Nepali questions were transcribed almost perfectly, but commands containing English loanwords ("Safari", "note", "save") came back as Latin-script guesses or romanised Nepali. A prompt naming both languages and their scripts reduced Nepali CER from 44.6% to 25.5% (WER 61.9% to 43.9%).
+
+**A rule fixed in advance kept English unchanged.** The mixed prompt would be adopted as the default only if English WER worsened by at most one point. The first comparison was invalid: the baseline (6.1%) had been scored with older text normalisation than the new run (7.4%). Re-scoring the original prompt with the current normalisation gave 5.6%, so the mixed prompt was 1.8 points worse and was rejected as the default. It is used only in Nepali mode (`NOVA_SPEECH_LANGUAGE=ne`); English mode keeps the original prompt.
+
+**Replies follow the user's language.** The system instruction asks for English, or Nepali in Devanagari; a check showed Gemini already answered a Nepali question correctly in Devanagari.
+
+**Devanagari answers use a Hindi voice.** macOS has no Nepali voice; a Hindi voice (default `Lekha`, configurable with `NOVA_DEVANAGARI_VOICE`) reads Devanagari with Hindi pronunciation, judged understandable by the developer. Availability is checked once with `say -v ?`; if the voice is missing, the answer is shown as text with an explanation.
+
+**Known limit: Nepali commands.** Only 3 of 12 Nepali phrases were transcribed exactly, with most errors in commands mixing in English words. Misrecognition cannot cause unintended actions: anything with side effects shows the exact action for confirmation first.

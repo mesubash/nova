@@ -247,3 +247,74 @@ def test_is_speaking_follows_process_state():
     speaker.speak("again")
     speaker.stop()
     assert not speaker.is_speaking
+
+
+# Voices for Devanagari text
+
+
+def make_voiced_speaker(installed=("Lekha",)):
+    processes = []
+    checks = []
+
+    def fake_popen(args, **kwargs):
+        process = FakeProcess(args, **kwargs)
+        processes.append(process)
+        return process
+
+    def voices():
+        checks.append(1)
+        return set(installed)
+
+    speaker = Speaker(popen=fake_popen, devanagari_voice="Lekha", voices=voices)
+    return speaker, processes, checks
+
+
+def test_devanagari_text_uses_the_configured_voice():
+    speaker, processes, _ = make_voiced_speaker()
+    speaker.speak("नेपालको राजधानी काठमाडौं हो।")
+    assert processes[0].args == ["say", "-v", "Lekha"]
+    assert processes[0].stdin.data == "नेपालको राजधानी काठमाडौं हो।".encode()
+
+
+def test_english_text_keeps_the_default_voice():
+    speaker, processes, _ = make_voiced_speaker()
+    speaker.speak("The capital is Kathmandu.")
+    assert processes[0].args == ["say"]
+
+
+def test_missing_voice_explains_and_starts_nothing():
+    speaker, processes, _ = make_voiced_speaker(installed=())
+    with pytest.raises(SpeechError, match="Hindi voice"):
+        speaker.speak("नमस्ते")
+    assert processes == []
+
+
+def test_voice_list_is_checked_only_once():
+    speaker, _, checks = make_voiced_speaker()
+    speaker.speak("नमस्ते")
+    speaker.speak("धन्यवाद")
+    assert len(checks) == 1
+
+
+def test_available_voices_parses_say_output():
+    listing = (
+        "Lekha               hi_IN    # नमस्ते! मेरा नाम लेखा है।\n"
+        "Eddy (English (UK)) en_GB    # Hello! My name is Eddy.\n"
+        "Samantha            en_US    # Hello! My name is Samantha.\n"
+    )
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, listing, "")
+
+    from nova.speech import available_voices
+
+    assert available_voices(run=fake_run) == {"Lekha", "Eddy (English (UK))", "Samantha"}
+
+
+def test_available_voices_is_empty_when_say_fails():
+    def failing_run(args, **kwargs):
+        raise OSError("no say")
+
+    from nova.speech import available_voices
+
+    assert available_voices(run=failing_run) == set()

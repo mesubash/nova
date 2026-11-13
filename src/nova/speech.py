@@ -11,6 +11,8 @@ import numpy as np
 import sounddevice as sd
 
 _MARKDOWN_SYMBOLS = re.compile(r"[*_#`>~]")
+_DEVANAGARI = re.compile("[\u0900-\u097f]")
+_VOICE_LINE = re.compile(r"^(.*?)\s+[a-z]{2,3}_[A-Z0-9]{2,3}\s+#")
 
 
 class SpeechError(Exception):
@@ -27,9 +29,14 @@ class Speaker:
         self,
         command: str = "say",
         popen: Callable[..., subprocess.Popen] = subprocess.Popen,
+        devanagari_voice: str | None = None,
+        voices: Callable[[], set[str]] | None = None,
     ) -> None:
         self._command = command
         self._popen = popen
+        self._devanagari_voice = devanagari_voice
+        self._voices = voices or available_voices
+        self._devanagari_voice_ok: bool | None = None  # checked once, on first use
         self._process: subprocess.Popen | None = None
 
     def speak(self, text: str) -> None:
@@ -39,9 +46,12 @@ class Speaker:
         if not speakable:
             return
 
+        command = [self._command]
+        if self._devanagari_voice and _DEVANAGARI.search(speakable):
+            command += ["-v", self._checked_devanagari_voice()]
         try:
             process = self._popen(
-                [self._command],
+                command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -60,6 +70,19 @@ class Speaker:
     @property
     def is_speaking(self) -> bool:
         return self._process is not None and self._process.poll() is None
+
+    def _checked_devanagari_voice(self) -> str:
+        voice = self._devanagari_voice
+        assert voice is not None
+        if self._devanagari_voice_ok is None:
+            self._devanagari_voice_ok = voice in self._voices()
+        if not self._devanagari_voice_ok:
+            raise SpeechError(
+                f'no installed voice can read Nepali text ("{voice}" was not found). Add a '
+                "Hindi voice in System Settings > Accessibility > Spoken Content, or set "
+                "NOVA_DEVANAGARI_VOICE."
+            )
+        return voice
 
     def stop(self) -> None:
         """Stop speech if it is playing. Safe to call at any time."""
@@ -143,3 +166,18 @@ class Recorder:
         samples = np.concatenate(chunks)[:max_frames, 0] if chunks else np.zeros(0, np.float32)
         check_signal(samples)
         return to_wav(samples)
+
+
+def available_voices(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> set[str]:
+    """Names of the voices `say` can use, read from `say -v ?`. Empty if that fails."""
+    try:
+        listing = run(
+            ["say", "-v", "?"], capture_output=True, text=True, timeout=5, check=True
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {
+        match.group(1).strip()
+        for line in listing.splitlines()
+        if (match := _VOICE_LINE.match(line))
+    }
