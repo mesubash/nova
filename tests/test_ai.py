@@ -207,3 +207,63 @@ def test_note_declarations_have_the_right_parameters():
     by_name = {declaration.name: declaration for declaration in tool.function_declarations}
     assert by_name["list_notes"].parameters is None
     assert by_name["edit_note"].parameters.required == ["id", "text"]
+
+
+# Rate limits
+
+
+def rate_limited(message="Quota exceeded.", retry_info=None):
+    error = {"code": 429, "message": message, "status": "RESOURCE_EXHAUSTED"}
+    if retry_info is not None:
+        error["details"] = [
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_info}
+        ]
+    return errors.ClientError(429, {"error": error})
+
+
+def test_short_rate_limit_waits_the_requested_time_then_retries():
+    client, fake, sleeps = make_client(
+        side_effect=[rate_limited(retry_info="3s"), fake_response(text="ok")]
+    )
+    assert client.reply(HISTORY) == "ok"
+    assert sleeps == [3.0]
+    assert fake.models.generate_content.call_count == 2
+
+
+def test_wait_is_read_from_the_message_when_retry_info_is_missing():
+    client, _, sleeps = make_client(
+        side_effect=[rate_limited("Please retry in 2.5s."), fake_response(text="ok")]
+    )
+    assert client.reply(HISTORY) == "ok"
+    assert sleeps == [2.5]
+
+
+def test_rate_limit_is_retried_only_once():
+    client, fake, sleeps = make_client(side_effect=rate_limited(retry_info="1s"))
+    with pytest.raises(AIError, match="request limit"):
+        client.reply(HISTORY)
+    assert fake.models.generate_content.call_count == 2
+    assert sleeps == [1.0]
+
+
+def test_long_rate_limit_fails_fast_and_says_how_long_to_wait():
+    client, fake, sleeps = make_client(side_effect=rate_limited("Please retry in 30.2s."))
+    with pytest.raises(AIError, match="about 31 seconds"):
+        client.reply(HISTORY)
+    assert fake.models.generate_content.call_count == 1
+    assert sleeps == []
+
+
+def test_rate_limit_without_a_wait_time_says_wait_a_minute():
+    client, fake, _ = make_client(side_effect=rate_limited("Quota exceeded."))
+    with pytest.raises(AIError, match="Wait a minute"):
+        client.reply(HISTORY)
+    assert fake.models.generate_content.call_count == 1
+
+
+def test_transcription_also_waits_on_short_rate_limits():
+    client, _, sleeps = make_client(
+        side_effect=[rate_limited(retry_info="2s"), fake_response(text="hello")]
+    )
+    assert client.transcribe(WAV) == "hello"
+    assert sleeps == [2.0]
