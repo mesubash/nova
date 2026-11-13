@@ -11,6 +11,7 @@ from dotenv import find_dotenv, load_dotenv
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_HISTORY_TURNS = 10
 DEFAULT_MAX_RECORDING_SECONDS = 30.0
+DEFAULT_DATA_DIR = Path("~/Library/Application Support/NOVA")
 DEFAULT_ALLOWED_APPS = ("Safari", "Notes", "Calendar", "Music", "Calculator", "TextEdit", "Finder")
 
 
@@ -27,6 +28,7 @@ class Config:
     max_recording_seconds: float = DEFAULT_MAX_RECORDING_SECONDS
     allowed_apps: tuple[str, ...] = DEFAULT_ALLOWED_APPS
     search_folder: Path | None = None
+    data_dir: Path = DEFAULT_DATA_DIR.expanduser()
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -51,6 +53,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         ),
         allowed_apps=_app_list(env, "NOVA_ALLOWED_APPS"),
         search_folder=_optional_folder(env, "NOVA_SEARCH_FOLDER"),
+        data_dir=_data_dir(env, "NOVA_DATA_DIR"),
     )
 
 
@@ -102,3 +105,11 @@ def _optional_folder(env: Mapping[str, str], name: str) -> Path | None:
     if not folder.is_dir():
         raise ConfigError(f"{name} must be an existing folder, got {raw!r}.")
     return folder.resolve()
+
+
+def _data_dir(env: Mapping[str, str], name: str) -> Path:
+    raw = env.get(name, "").strip()
+    folder = (Path(raw) if raw else DEFAULT_DATA_DIR).expanduser().resolve()
+    if folder.exists() and not folder.is_dir():
+        raise ConfigError(f"{name} must be a folder, got {raw!r}.")
+    return folder
