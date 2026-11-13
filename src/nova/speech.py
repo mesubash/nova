@@ -57,6 +57,10 @@ class Speaker:
             self.stop()
             raise SpeechError(f"could not send text to '{self._command}': {exc}") from exc
 
+    @property
+    def is_speaking(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
     def stop(self) -> None:
         """Stop speech if it is playing. Safe to call at any time."""
         process, self._process = self._process, None
