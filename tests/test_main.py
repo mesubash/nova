@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from nova import __main__ as app
+from nova.actions import CANCELLED, ActionPolicy, ActionRequest, ActionResult, OpenApp
 from nova.ai import AIError
 from nova.config import Config, ConfigError
 from nova.speech import RecordingError, SpeechError
@@ -11,6 +12,7 @@ from nova.speech import RecordingError, SpeechError
 class FakeConversation:
     def __init__(self, answers=(), events=None):
         self.answers = list(answers)
+        self.completed = []
         self.asked = []
         self.events = events if events is not None else []
 
@@ -21,6 +23,9 @@ class FakeConversation:
         if isinstance(answer, BaseException):
             raise answer
         return answer
+
+    def complete_action(self, outcome):
+        self.completed.append(outcome)
 
 
 class FakeSpeaker:
@@ -55,12 +60,20 @@ def scripted(lines):
     return read
 
 
-def run(lines, answers=(), speaker=None, events=None, heard=()):
+def run(lines, answers=(), speaker=None, events=None, heard=(), execute_action=None):
     conversation = FakeConversation(answers, events)
     speaker = speaker or FakeSpeaker(events=events)
     listener = FakeListener(heard, events)
     output = []
-    app.run_loop(conversation, speaker, listener, read=scripted(lines), write=output.append)
+    app.run_loop(
+        conversation,
+        speaker,
+        listener,
+        POLICY,
+        read=scripted(lines),
+        write=output.append,
+        execute_action=execute_action or FakeExecute(),
+    )
     return conversation, speaker, output, listener
 
 
@@ -211,3 +224,54 @@ def test_typing_still_works_without_listening():
     conversation, _, _, listener = run(["typed question", "/exit"], answers=["ok"])
     assert conversation.asked == ["typed question"]
     assert listener.calls == 0
+
+
+POLICY = ActionPolicy(("Safari",), None)
+
+
+class FakeExecute:
+    def __init__(self, result=None):
+        self.result = result or ActionResult(True, "Done.")
+        self.actions = []
+
+    def __call__(self, action):
+        self.actions.append(action)
+        return self.result
+
+
+def test_confirmed_action_runs_and_is_spoken():
+    execute_action = FakeExecute(ActionResult(True, "Opened Safari."))
+    conversation, speaker, output, _ = run(
+        ["open safari", "y", "/exit"],
+        answers=[ActionRequest("open_app", {"app": "safari"})],
+        execute_action=execute_action,
+    )
+    assert execute_action.actions == [OpenApp("Safari")]
+    assert "nova> Opened Safari." in output
+    assert conversation.completed == ["Opened Safari."]
+    assert speaker.spoken == ["Opened Safari."]
+
+
+@pytest.mark.parametrize("reply", ["n", "", "no", "maybe"])
+def test_anything_but_yes_executes_nothing(reply):
+    execute_action = FakeExecute()
+    conversation, _, output, _ = run(
+        ["open safari", reply, "/exit"],
+        answers=[ActionRequest("open_app", {"app": "Safari"})],
+        execute_action=execute_action,
+    )
+    assert execute_action.actions == []
+    assert f"nova> {CANCELLED.message}" in output
+    assert conversation.completed == [CANCELLED.message]
+
+
+def test_disallowed_app_is_rejected_and_reported():
+    execute_action = FakeExecute()
+    _, _, output, _ = run(
+        ["open terminal", "/exit"],
+        answers=[ActionRequest("open_app", {"app": "Terminal"})],
+        execute_action=execute_action,
+    )
+    assert execute_action.actions == []
+    assert any("can't do that" in line for line in output)
+    assert output[-1] == "Goodbye."

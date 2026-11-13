@@ -2,8 +2,9 @@ from unittest.mock import Mock
 
 import httpx2
 import pytest
-from google.genai import errors
+from google.genai import errors, types
 
+from nova.actions import ActionRequest
 from nova.ai import (
     MAX_ATTEMPTS,
     NO_SPEECH,
@@ -15,6 +16,11 @@ from nova.ai import (
     Message,
 )
 from nova.config import Config
+
+
+def fake_response(text=None, calls=None):
+    return Mock(text=text, function_calls=calls)
+
 
 CONFIG = Config(api_key="test-key", model="test-model")
 HISTORY = [Message("user", "Hi"), Message("assistant", "Hello!"), Message("user", "And?")]
@@ -42,12 +48,12 @@ def make_client(**generate_behavior):
 
 
 def test_reply_returns_stripped_text():
-    client, _, _ = make_client(return_value=Mock(text="  Answer  "))
+    client, _, _ = make_client(return_value=fake_response(text="  Answer  "))
     assert client.reply(HISTORY) == "Answer"
 
 
 def test_reply_sends_model_and_mapped_roles():
-    client, fake, _ = make_client(return_value=Mock(text="ok"))
+    client, fake, _ = make_client(return_value=fake_response(text="ok"))
     client.reply(HISTORY)
     kwargs = fake.models.generate_content.call_args.kwargs
     assert kwargs["model"] == "test-model"
@@ -71,7 +77,7 @@ def test_failures_become_ai_error(error, expected):
 
 
 def test_server_error_is_retried_then_succeeds():
-    client, fake, sleeps = make_client(side_effect=[server_error(), Mock(text="ok")])
+    client, fake, sleeps = make_client(side_effect=[server_error(), fake_response(text="ok")])
     assert client.reply(HISTORY) == "ok"
     assert fake.models.generate_content.call_count == 2
     assert sleeps == [RETRY_DELAY_SECONDS]
@@ -98,13 +104,13 @@ def test_non_transient_errors_are_not_retried(error):
 
 @pytest.mark.parametrize("text", [None, "", "   "])
 def test_empty_response_raises(text):
-    client, _, _ = make_client(return_value=Mock(text=text))
+    client, _, _ = make_client(return_value=fake_response(text=text))
     with pytest.raises(AIError, match="empty"):
         client.reply(HISTORY)
 
 
 def test_empty_history_is_a_programming_error():
-    client, _, _ = make_client(return_value=Mock(text="ok"))
+    client, _, _ = make_client(return_value=fake_response(text="ok"))
     with pytest.raises(ValueError):
         client.reply([])
 
@@ -123,14 +129,14 @@ def test_timeout_is_passed_in_milliseconds(monkeypatch):
 
 
 def test_reply_sends_spoken_style_system_instruction():
-    client, fake, _ = make_client(return_value=Mock(text="ok"))
+    client, fake, _ = make_client(return_value=fake_response(text="ok"))
     client.reply(HISTORY)
     config = fake.models.generate_content.call_args.kwargs["config"]
     assert config.system_instruction == SYSTEM_INSTRUCTION
 
 
 def test_transcribe_sends_prompt_and_audio_without_chat_instruction():
-    client, fake, _ = make_client(return_value=Mock(text="what time is it"))
+    client, fake, _ = make_client(return_value=fake_response(text="what time is it"))
     assert client.transcribe(WAV) == "what time is it"
     kwargs = fake.models.generate_content.call_args.kwargs
     parts = kwargs["contents"][0].parts
@@ -142,12 +148,12 @@ def test_transcribe_sends_prompt_and_audio_without_chat_instruction():
 
 @pytest.mark.parametrize("text", [NO_SPEECH, NO_SPEECH.upper(), "", None])
 def test_transcribe_returns_empty_string_when_no_speech(text):
-    client, _, _ = make_client(return_value=Mock(text=text))
+    client, _, _ = make_client(return_value=fake_response(text=text))
     assert client.transcribe(WAV) == ""
 
 
 def test_transcribe_retries_transient_errors():
-    client, fake, _ = make_client(side_effect=[server_error(), Mock(text="hello")])
+    client, fake, _ = make_client(side_effect=[server_error(), fake_response(text="hello")])
     assert client.transcribe(WAV) == "hello"
     assert fake.models.generate_content.call_count == 2
 
@@ -156,3 +162,30 @@ def test_transcribe_rejects_empty_audio():
     client, _, _ = make_client()
     with pytest.raises(ValueError):
         client.transcribe(b"")
+
+
+def test_function_call_becomes_untrusted_action_request():
+    call = types.FunctionCall(name="open_app", args={"app": "Safari"})
+    client, _, _ = make_client(return_value=fake_response(calls=[call]))
+    assert client.reply(HISTORY) == ActionRequest("open_app", {"app": "Safari"})
+
+
+def test_function_call_without_args_has_empty_args():
+    call = types.FunctionCall(name="open_app")
+    client, _, _ = make_client(return_value=fake_response(calls=[call]))
+    assert client.reply(HISTORY) == ActionRequest("open_app", {})
+
+
+def test_chat_declares_actions_and_lists_allowed_apps():
+    client, fake, _ = make_client(return_value=fake_response(text="ok"))
+    client.reply(HISTORY)
+    tool = fake.models.generate_content.call_args.kwargs["config"].tools[0]
+    names = [declaration.name for declaration in tool.function_declarations]
+    assert names == ["open_app", "open_url", "search_files"]
+    assert "Safari" in tool.function_declarations[0].description
+
+
+def test_transcription_declares_no_actions():
+    client, fake, _ = make_client(return_value=fake_response(text="hello"))
+    client.transcribe(WAV)
+    assert fake.models.generate_content.call_args.kwargs["config"].tools is None

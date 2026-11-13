@@ -5,6 +5,7 @@ import sys
 from collections.abc import Callable
 
 from nova import __version__
+from nova.actions import Action, ActionPolicy, ActionRequest, ActionResult, execute, run_action
 from nova.ai import AIError, GeminiClient
 from nova.config import ConfigError, load_config
 from nova.conversation import Conversation
@@ -13,13 +14,19 @@ from nova.speech import Recorder, RecordingError, Speaker, SpeechError
 EXIT_COMMAND = "/exit"
 STOP_COMMAND = "/stop"
 
+Read = Callable[[str], str]
+Write = Callable[[str], None]
+ExecuteAction = Callable[[Action], ActionResult]
+
 
 def run_loop(
     conversation: Conversation,
     speaker: Speaker,
     listen: Callable[[], str],
-    read: Callable[[str], str] = input,
-    write: Callable[[str], None] = print,
+    policy: ActionPolicy,
+    read: Read = input,
+    write: Write = print,
+    execute_action: ExecuteAction = execute,
 ) -> None:
     write(
         f"NOVA {__version__}. Type a question, or press Enter to speak. "
@@ -42,13 +49,13 @@ def run_loop(
             text = _listen(listen, write)
             if not text:
                 continue
-        _answer(conversation, speaker, text, write)
+        _answer(conversation, speaker, text, policy, read, write, execute_action)
 
     speaker.stop()
     write("Goodbye.")
 
 
-def _listen(listen: Callable[[], str], write: Callable[[str], None]) -> str:
+def _listen(listen: Callable[[], str], write: Write) -> str:
     """Capture and transcribe one spoken question. Returns "" if nothing usable."""
     try:
         text = listen()
@@ -67,11 +74,17 @@ def _listen(listen: Callable[[], str], write: Callable[[str], None]) -> str:
 
 
 def _answer(
-    conversation: Conversation, speaker: Speaker, text: str, write: Callable[[str], None]
+    conversation: Conversation,
+    speaker: Speaker,
+    text: str,
+    policy: ActionPolicy,
+    read: Read,
+    write: Write,
+    execute_action: ExecuteAction,
 ) -> None:
     write("[thinking]")
     try:
-        answer = conversation.ask(text)
+        reply = conversation.ask(text)
     except AIError as exc:
         write(f"[error] {exc}")
         return
@@ -79,11 +92,28 @@ def _answer(
         write("[cancelled]")
         return
 
-    write(f"nova> {answer}")
+    details: tuple[str, ...] = ()
+    if isinstance(reply, ActionRequest):
+        result = run_action(reply, policy, lambda action: _confirm(action, read), execute_action)
+        conversation.complete_action(result.message)
+        reply, details = result.message, result.details
+
+    write(f"nova> {reply}")
+    for item in details:
+        write(f"  - {item}")
     try:
-        speaker.speak(answer)
+        speaker.speak(reply)
     except SpeechError as exc:
         write(f"[speech unavailable] {exc}")
+
+
+def _confirm(action: Action, read: Read) -> bool:
+    """Ask before an action with side effects. Anything but an explicit yes means no."""
+    try:
+        answer = read(f"{action.describe()}? [y/N] ")
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer.strip().lower() in ("y", "yes")
 
 
 def wait_for_enter(timeout: float) -> None:
@@ -103,6 +133,7 @@ def main() -> int:
     client = GeminiClient(config)
     speaker = Speaker()
     recorder = Recorder(config.max_recording_seconds)
+    policy = ActionPolicy(config.allowed_apps, config.search_folder)
 
     def listen() -> str:
         print(
@@ -114,7 +145,7 @@ def main() -> int:
         return client.transcribe(wav)
 
     try:
-        run_loop(Conversation(client, config.max_history_turns), speaker, listen)
+        run_loop(Conversation(client, config.max_history_turns), speaker, listen, policy)
     finally:
         speaker.stop()
         client.close()

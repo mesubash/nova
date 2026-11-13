@@ -6,6 +6,7 @@ from nova.actions import (
     ActionPolicy,
     ActionRejected,
     ActionRequest,
+    ActionResult,
     OpenApp,
     OpenUrl,
     SearchFiles,
@@ -13,6 +14,7 @@ from nova.actions import (
     validate,
 )
 from nova.actions.execute import search_files
+from nova.actions.flow import CANCELLED, run_action
 
 
 @pytest.fixture
@@ -214,3 +216,48 @@ def test_search_with_no_matches_says_so(folder):
     assert result.ok
     assert result.details == ()
     assert "No files" in result.message
+
+
+# The decide-then-act flow
+
+
+def test_flow_rejects_without_asking(policy):
+    asked = []
+    result = run_action(ActionRequest("open_app", {"app": "Terminal"}), policy, asked.append)
+    assert not result.ok
+    assert "can't do that" in result.message
+    assert asked == []
+
+
+def test_declined_confirmation_executes_nothing(policy):
+    executed = []
+    result = run_action(
+        ActionRequest("open_app", {"app": "Safari"}),
+        policy,
+        confirm=lambda action: False,
+        execute_action=executed.append,
+    )
+    assert result == CANCELLED
+    assert executed == []
+
+
+def test_confirmed_action_is_executed(policy):
+    result = run_action(
+        ActionRequest("open_app", {"app": "safari"}),
+        policy,
+        confirm=lambda action: True,
+        execute_action=lambda action: ActionResult(True, f"did {action.app}"),
+    )
+    assert result.message == "did Safari"
+
+
+def test_read_only_search_runs_without_confirmation(policy):
+    asked = []
+
+    def confirm(action):
+        asked.append(action)
+        return False
+
+    result = run_action(ActionRequest("search_files", {"query": "budget"}), policy, confirm)
+    assert asked == []
+    assert result.details == ("budget.xlsx",)

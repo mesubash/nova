@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QTextBrowser,
     QVBoxLayout,
@@ -20,6 +21,17 @@ from PySide6.QtWidgets import (
 )
 
 from nova import __version__
+from nova.actions import (
+    CANCELLED,
+    Action,
+    ActionPolicy,
+    ActionRejected,
+    ActionRequest,
+    ActionResult,
+    execute,
+    rejection,
+    validate,
+)
 from nova.ai import AIError
 from nova.conversation import Conversation
 from nova.speech import Recorder, RecordingError, Speaker, SpeechError
@@ -36,6 +48,7 @@ class State(StrEnum):
     TRANSCRIBING = "Transcribing…"
     THINKING = "Thinking…"
     SPEAKING = "Speaking…"
+    ACTING = "Working…"
     ERROR = "Error"
 
 
@@ -49,8 +62,11 @@ class MainWindow(QMainWindow):
         speaker: Speaker,
         recorder: Recorder,
         transcribe: Callable[[bytes], str],
+        policy: ActionPolicy,
         runner: TaskRunner | None = None,
         min_hold_seconds: float = MIN_HOLD_SECONDS,
+        confirm: Callable[[Action], bool] | None = None,
+        execute_action: Callable[[Action], ActionResult] | None = None,
     ) -> None:
         super().__init__()
         self._conversation = conversation
@@ -58,6 +74,9 @@ class MainWindow(QMainWindow):
         self._recorder = recorder
         self._transcribe = transcribe
         self._min_hold_seconds = min_hold_seconds
+        self._policy = policy
+        self._confirm = confirm or self._ask_confirmation
+        self._execute_action = execute_action or execute
         self._stop_recording: threading.Event | None = None
         self._listen_started = 0.0
         self.runner = runner or TaskRunner(self)
@@ -185,16 +204,53 @@ class MainWindow(QMainWindow):
         self.set_state(State.THINKING)
         self.runner.start(lambda: self._conversation.ask(text), on_success=self._on_answer)
 
-    def _on_answer(self, answer: str) -> None:
+    def _on_answer(self, answer: str | ActionRequest) -> None:
+        if isinstance(answer, ActionRequest):
+            self._handle_action(answer)
+            return
         self._add_line("NOVA", answer)
+        self._speak(answer)
+
+    def _speak(self, text: str) -> None:
         try:
-            self._speaker.speak(answer)
+            self._speaker.speak(text)
         except SpeechError as exc:
             self._add_error(f"Speech unavailable: {exc}")
             self.set_state(State.READY)
             return
         self.set_state(State.SPEAKING)
         self._speech_timer.start()
+
+    # Desktop actions
+
+    def _handle_action(self, request: ActionRequest) -> None:
+        try:
+            action = validate(request, self._policy)
+        except ActionRejected as exc:
+            self._finish_action(rejection(exc))
+            return
+        if action.requires_confirmation and not self._confirm(action):
+            self._finish_action(CANCELLED)
+            return
+        self.set_state(State.ACTING)
+        self.runner.start(lambda: self._execute_action(action), on_success=self._finish_action)
+
+    def _finish_action(self, result: ActionResult) -> None:
+        self._conversation.complete_action(result.message)
+        self._add_line("NOVA", result.message)
+        for item in result.details:
+            self._add_notice(f"• {item}")
+        self._speak(result.message)
+
+    def _ask_confirmation(self, action: Action) -> bool:
+        reply = QMessageBox.question(
+            self,
+            "Confirm action",
+            f"{action.describe()}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def _on_failure(self, error: Exception) -> None:
         self._stop_recording = None
