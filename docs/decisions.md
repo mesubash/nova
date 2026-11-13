@@ -58,3 +58,15 @@ Server load varies over time; rerun the benchmark before changing models.
 **Silence and permission checks before uploading.** A recording of exact zeros usually means macOS denied the microphone (it does not raise an error), so the user is pointed to Privacy & Security. A recording whose loudest sample is below `SILENCE_PEAK` (0.02) is treated as silence without calling the API. The threshold is a starting value to tune with measurements.
 
 **Recording length is bounded** by `NOVA_MAX_RECORDING_SECONDS` (default 30), enforced in the audio callback; waiting for Enter uses `select` with the same timeout.
+
+## V0.4: Desktop interface (2026-11-13)
+
+**PySide6 window alongside the terminal app.** `nova-gui` opens the window and `nova` keeps the terminal interface; both use the same core modules.
+
+**One background worker, results via Qt signals.** `TaskRunner` runs one blocking task at a time on a single thread, so requests cannot overlap and the UI thread is never blocked. Results return to the UI thread through queued signals; widgets are only touched there.
+
+**Cancellation by task number.** Running threads cannot be stopped safely, so cancelling advances the current task number and results from older tasks are dropped when they arrive. Used for quick taps of Talk and when the window closes.
+
+**Hold-to-talk reuses the terminal `Recorder`.** The window passes `threading.Event.wait` as the stop function; releasing the button sets the event. Presses shorter than 0.3 s are cancelled with a hint.
+
+**One `set_state()` controls status text and enabled controls**, so the controls always match what NOVA is doing. Speaking is detected by polling the `say` process every 200 ms with a `QTimer`.

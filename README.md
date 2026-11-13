@@ -2,7 +2,7 @@
 
 A macOS-first personal AI voice assistant, built as a learning project on a MacBook Air M4.
 
-**Status:** V0.1, typed conversation with Gemini in the terminal. Voice, a desktop window, desktop actions and personal notes are planned; see [docs/PLAN.md](docs/PLAN.md).
+**Status:** V0.4, typed and spoken conversation with Gemini in the terminal and in a desktop window. Desktop actions and personal notes are planned; see [docs/PLAN.md](docs/PLAN.md).
 
 ## What works now
 
@@ -14,6 +14,7 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 - Press Enter or type `/stop` to stop speaking.
 - Press Enter on an empty line to ask by voice; press Enter again to stop recording.
 - Recordings stop automatically after `NOVA_MAX_RECORDING_SECONDS`; silence is detected without calling the API.
+- Desktop window (`nova-gui`) with transcript, hold-to-talk, stop speaking (Esc), and visible status; it stays responsive during requests.
 
 ## Requirements
 
@@ -51,6 +52,12 @@ nova
 ```
 
 `python -m nova` also works.
+
+For the desktop window:
+
+```bash
+nova-gui
+```
 
 ## Development
 
