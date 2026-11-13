@@ -267,3 +267,21 @@ def test_transcription_also_waits_on_short_rate_limits():
     )
     assert client.transcribe(WAV) == "hello"
     assert sleeps == [2.0]
+
+
+def test_nepali_mode_uses_the_mixed_language_prompt():
+    from nova.ai import TRANSCRIBE_PROMPT_MIXED
+
+    fake = Mock()
+    fake.models.generate_content = Mock(return_value=fake_response(text="नमस्ते"))
+    config = Config(api_key="k", model="m", speech_language="ne")
+    GeminiClient(config, client=fake, sleep=lambda s: None).transcribe(WAV)
+    parts = fake.models.generate_content.call_args.kwargs["contents"][0].parts
+    assert parts[0].text == TRANSCRIBE_PROMPT_MIXED
+
+
+def test_english_mode_keeps_the_original_prompt():
+    client, fake, _ = make_client(return_value=fake_response(text="hello"))
+    client.transcribe(WAV)
+    parts = fake.models.generate_content.call_args.kwargs["contents"][0].parts
+    assert parts[0].text == TRANSCRIBE_PROMPT

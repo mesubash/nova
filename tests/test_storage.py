@@ -128,3 +128,9 @@ def test_corrupt_database_reports_storage_error(db_path):
     db_path.write_bytes(b"this is not a sqlite database")
     with pytest.raises(StorageError):
         NoteStore(db_path)
+
+
+def test_nepali_notes_are_stored_and_found(store):
+    store.add("दूध र रोटी किन्नु")
+    store.add("Call the dentist")
+    assert [note.text for note in store.search("रोटी")] == ["दूध र रोटी किन्नु"]

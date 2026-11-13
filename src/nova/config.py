@@ -15,6 +15,9 @@ DEFAULT_DATA_DIR = Path("~/Library/Application Support/NOVA")
 TRANSCRIBERS = ("gemini", "local")
 DEFAULT_TRANSCRIBER = "gemini"
 DEFAULT_LOCAL_MODEL = "mlx-community/whisper-large-v3-turbo"
+SPEECH_LANGUAGES = ("en", "ne")
+DEFAULT_SPEECH_LANGUAGE = "en"
+DEFAULT_DEVANAGARI_VOICE = "Lekha"
 DEFAULT_ALLOWED_APPS = ("Safari", "Notes", "Calendar", "Music", "Calculator", "TextEdit", "Finder")
 
 
@@ -34,6 +37,8 @@ class Config:
     data_dir: Path = DEFAULT_DATA_DIR.expanduser()
     transcriber: str = DEFAULT_TRANSCRIBER
     local_model: str = DEFAULT_LOCAL_MODEL
+    speech_language: str = DEFAULT_SPEECH_LANGUAGE
+    devanagari_voice: str = DEFAULT_DEVANAGARI_VOICE
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -45,7 +50,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
     if env is None:
         env = _environment()
 
-    return Config(
+    config = Config(
         api_key=_require(env, "GEMINI_API_KEY"),
         model=_require(env, "GEMINI_MODEL"),
         request_timeout_seconds=_positive_float(
@@ -60,7 +65,17 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         data_dir=_data_dir(env, "NOVA_DATA_DIR"),
         transcriber=_choice(env, "NOVA_TRANSCRIBER", TRANSCRIBERS, DEFAULT_TRANSCRIBER),
         local_model=env.get("NOVA_LOCAL_MODEL", "").strip() or DEFAULT_LOCAL_MODEL,
+        speech_language=_choice(
+            env, "NOVA_SPEECH_LANGUAGE", SPEECH_LANGUAGES, DEFAULT_SPEECH_LANGUAGE
+        ),
+        devanagari_voice=env.get("NOVA_DEVANAGARI_VOICE", "").strip() or DEFAULT_DEVANAGARI_VOICE,
     )
+    if config.speech_language == "ne" and config.transcriber == "local":
+        raise ConfigError(
+            "Local transcription does not handle Nepali well (86% word error rate measured). "
+            "Use NOVA_TRANSCRIBER=gemini with NOVA_SPEECH_LANGUAGE=ne."
+        )
+    return config
 
 
 def _require(env: Mapping[str, str], name: str) -> str:
@@ -138,6 +153,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 # NOVA_ALLOWED_APPS=Safari,Notes,Calendar,Music,Calculator,TextEdit,Finder
 # NOVA_SEARCH_FOLDER=~/Documents
 # NOVA_TRANSCRIBER=local
+# NOVA_SPEECH_LANGUAGE=ne
 """
 
 

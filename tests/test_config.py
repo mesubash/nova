@@ -191,3 +191,24 @@ def test_local_transcriber_and_model_can_be_selected():
 def test_unknown_transcriber_is_rejected():
     with pytest.raises(ConfigError, match="NOVA_TRANSCRIBER"):
         load_config({**VALID_ENV, "NOVA_TRANSCRIBER": "siri"})
+
+
+def test_speech_language_defaults_to_english():
+    config = load_config(VALID_ENV)
+    assert config.speech_language == "en"
+    assert config.devanagari_voice == "Lekha"
+
+
+def test_nepali_mode_can_be_selected():
+    assert load_config({**VALID_ENV, "NOVA_SPEECH_LANGUAGE": "ne"}).speech_language == "ne"
+
+
+def test_unknown_speech_language_is_rejected():
+    with pytest.raises(ConfigError, match="NOVA_SPEECH_LANGUAGE"):
+        load_config({**VALID_ENV, "NOVA_SPEECH_LANGUAGE": "fr"})
+
+
+def test_nepali_with_local_transcription_is_refused():
+    env = {**VALID_ENV, "NOVA_SPEECH_LANGUAGE": "ne", "NOVA_TRANSCRIBER": "local"}
+    with pytest.raises(ConfigError, match="Nepali"):
+        load_config(env)

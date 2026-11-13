@@ -53,7 +53,7 @@ def main() -> int:
         return 1
 
     client = GeminiClient(config)
-    speaker = Speaker()
+    speaker = Speaker(devanagari_voice=config.devanagari_voice)
     recorder = Recorder(config.max_recording_seconds)
     conversation = Conversation(client, config.max_history_turns)
     policy = ActionPolicy(config.allowed_apps, config.search_folder, _open_notes(config))

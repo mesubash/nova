@@ -162,7 +162,7 @@ def test_main_cleans_up_even_if_loop_crashes(monkeypatch):
     fake_speaker = Mock()
     monkeypatch.setattr(app, "load_config", lambda: Config(api_key="k", model="m"))
     monkeypatch.setattr(app, "GeminiClient", lambda config: fake_client)
-    monkeypatch.setattr(app, "Speaker", lambda: fake_speaker)
+    monkeypatch.setattr(app, "Speaker", lambda **kwargs: fake_speaker)
 
     def crashing_loop(*args, **kwargs):
         raise RuntimeError("bug")
