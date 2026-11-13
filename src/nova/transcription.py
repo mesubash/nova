@@ -35,9 +35,15 @@ class LocalTranscriber:
     and reused afterwards.
     """
 
-    def __init__(self, model: str, whisper: Callable[..., dict] | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        whisper: Callable[..., dict] | None = None,
+        language: str = LANGUAGE,
+    ) -> None:
         self._model = model
         self._whisper = whisper
+        self._language = language
 
     def __call__(self, wav: bytes) -> str:
         if not wav:
@@ -48,7 +54,7 @@ class LocalTranscriber:
             result = whisper(
                 samples,
                 path_or_hf_repo=self._model,
-                language=LANGUAGE,
+                language=self._language,
                 condition_on_previous_text=False,
             )
         except Exception as exc:  # download, load, and inference errors come in many types
