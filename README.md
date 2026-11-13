@@ -10,6 +10,8 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 - Clear messages for missing configuration, timeouts, network failures and API errors.
 - Automatic retry (up to 3 attempts) when Gemini's servers are temporarily overloaded.
 - `/exit`, Ctrl+D or Ctrl+C to quit; Ctrl+C while waiting cancels only that question.
+- Answers are spoken aloud with macOS `say` while the text stays visible.
+- Press Enter or type `/stop` to stop speaking.
 
 ## Requirements
 
