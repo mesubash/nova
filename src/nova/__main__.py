@@ -11,6 +11,7 @@ from nova.config import Config, ConfigError, load_config
 from nova.conversation import Conversation
 from nova.speech import Recorder, RecordingError, Speaker, SpeechError
 from nova.storage import NOTES_FILENAME, NoteStore, StorageError
+from nova.transcription import TranscriptionError, make_transcriber
 
 EXIT_COMMAND = "/exit"
 STOP_COMMAND = "/stop"
@@ -60,7 +61,7 @@ def _listen(listen: Callable[[], str], write: Write) -> str:
     """Capture and transcribe one spoken question. Returns "" if nothing usable."""
     try:
         text = listen()
-    except (RecordingError, AIError) as exc:
+    except (RecordingError, TranscriptionError, AIError) as exc:
         write(f"[error] {exc}")
         return ""
     except KeyboardInterrupt:
@@ -143,6 +144,7 @@ def main() -> int:
     client = GeminiClient(config)
     speaker = Speaker()
     recorder = Recorder(config.max_recording_seconds)
+    transcribe = make_transcriber(config, client)
     policy = ActionPolicy(config.allowed_apps, config.search_folder, _open_notes(config))
 
     def listen() -> str:
@@ -152,7 +154,7 @@ def main() -> int:
         )
         wav = recorder.record(wait_for_enter)
         print("[transcribing]")
-        return client.transcribe(wav)
+        return transcribe(wav)
 
     try:
         run_loop(Conversation(client, config.max_history_turns), speaker, listen, policy)

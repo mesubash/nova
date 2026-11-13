@@ -35,9 +35,10 @@ from nova.actions import (
 from nova.ai import AIError
 from nova.conversation import Conversation
 from nova.speech import Recorder, RecordingError, Speaker, SpeechError
+from nova.transcription import TranscriptionError
 from nova.ui.tasks import TaskRunner
 
-_EXPECTED_ERRORS = (AIError, RecordingError)
+_EXPECTED_ERRORS = (AIError, RecordingError, TranscriptionError)
 MIN_HOLD_SECONDS = 0.3
 SPEECH_POLL_MS = 200
 

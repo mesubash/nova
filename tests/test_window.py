@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from nova.actions import CANCELLED, ActionPolicy, ActionRequest, ActionResult, OpenApp
 from nova.ai import AIError
 from nova.speech import RecordingError, SpeechError
+from nova.transcription import TranscriptionError
 from nova.ui.window import MainWindow, State
 
 
@@ -415,3 +416,11 @@ def test_search_runs_without_confirmation_and_lists_results(qtbot, make_window, 
     ask(qtbot, window, "find my plan")
     assert asked == []
     assert "• notes/plan.txt" in text_of(window)
+
+
+def test_local_transcription_error_is_shown_as_expected(qtbot, make_window):
+    window = make_window(transcriber=FakeTranscriber(TranscriptionError("model missing")))
+    talk(qtbot, window)
+    assert "model missing" in text_of(window)
+    assert "Unexpected" not in text_of(window)
+    assert window.state == State.ERROR

@@ -29,6 +29,10 @@ build = [
     "pyinstaller>=6.10",
 ]
 
+local = [
+    "mlx-whisper>=0.4",
+]
+
 [project.scripts]
 nova = "nova.__main__:main"
 nova-gui = "nova.ui.app:main"

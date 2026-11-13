@@ -12,6 +12,9 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_HISTORY_TURNS = 10
 DEFAULT_MAX_RECORDING_SECONDS = 30.0
 DEFAULT_DATA_DIR = Path("~/Library/Application Support/NOVA")
+TRANSCRIBERS = ("gemini", "local")
+DEFAULT_TRANSCRIBER = "gemini"
+DEFAULT_LOCAL_MODEL = "mlx-community/whisper-large-v3-turbo"
 DEFAULT_ALLOWED_APPS = ("Safari", "Notes", "Calendar", "Music", "Calculator", "TextEdit", "Finder")
 
 
@@ -29,6 +32,8 @@ class Config:
     allowed_apps: tuple[str, ...] = DEFAULT_ALLOWED_APPS
     search_folder: Path | None = None
     data_dir: Path = DEFAULT_DATA_DIR.expanduser()
+    transcriber: str = DEFAULT_TRANSCRIBER
+    local_model: str = DEFAULT_LOCAL_MODEL
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -53,6 +58,8 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         allowed_apps=_app_list(env, "NOVA_ALLOWED_APPS"),
         search_folder=_optional_folder(env, "NOVA_SEARCH_FOLDER"),
         data_dir=_data_dir(env, "NOVA_DATA_DIR"),
+        transcriber=_choice(env, "NOVA_TRANSCRIBER", TRANSCRIBERS, DEFAULT_TRANSCRIBER),
+        local_model=env.get("NOVA_LOCAL_MODEL", "").strip() or DEFAULT_LOCAL_MODEL,
     )
 
 
@@ -130,6 +137,7 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 # Optional
 # NOVA_ALLOWED_APPS=Safari,Notes,Calendar,Music,Calculator,TextEdit,Finder
 # NOVA_SEARCH_FOLDER=~/Documents
+# NOVA_TRANSCRIBER=local
 """
 
 
@@ -176,3 +184,12 @@ def _make_private(path: Path) -> None:
             path.chmod(0o600)
         except OSError as exc:
             raise ConfigError(f"Could not restrict permissions on {path}: {exc}") from exc
+
+
+def _choice(env: Mapping[str, str], name: str, choices: tuple[str, ...], default: str) -> str:
+    raw = env.get(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw not in choices:
+        raise ConfigError(f"{name} must be one of {', '.join(choices)}, got {raw!r}.")
+    return raw

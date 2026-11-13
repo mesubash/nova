@@ -33,6 +33,26 @@ Measured on 2026-11-13 with `scripts/measure_latency.py` on a MacBook Air M4 ove
 
 "Speech start" is when the `say` process is launched, not when sound is first heard. Network conditions and Gemini's load change these numbers; rerun the script to measure your own setup. The packaged app is 134 MB, mostly the Qt framework.
 
+### Local transcription (optional)
+
+Transcribe voice questions on your Mac instead of with Gemini:
+
+```bash
+pip install -e ".[local]"
+echo 'NOVA_TRANSCRIBER=local' >> .env
+```
+
+The first voice question downloads `whisper-large-v3-turbo` (about 1.6 GB) from Hugging Face into `~/.cache/huggingface`; after that, your audio never leaves the Mac. Measured back to back on the same day with identical audio:
+
+| | Gemini transcription | Local transcription |
+| --- | --- | --- |
+| Transcription (median) | 1.66 s | 1.04 s |
+| Total: release Talk → speech starts (median) | 2.85 s | 2.14 s |
+| Failed runs (rate limit) | 2 of 9 | 0 of 9 |
+| "leap year" heard correctly | 2 of 2 | 0 of 3 ("league year") |
+
+Local is faster and steadier and halves Gemini usage; Gemini was more accurate on this small, synthetic-voice sample. Smaller models (`mlx-community/whisper-small-mlx`, `mlx-community/whisper-tiny-mlx`) are faster still and can be chosen with `NOVA_LOCAL_MODEL`.
+
 ## Limitations
 
 - macOS on Apple Silicon only; tested on a MacBook Air M4.
@@ -43,6 +63,7 @@ Measured on 2026-11-13 with `scripts/measure_latency.py` on a MacBook Air M4 ove
 - Note search matches keywords, not meaning.
 - The API key is stored in a private file rather than the macOS Keychain.
 - The app is not signed with a Developer ID or notarized.
+- Local transcription is available when running from source only; the packaged app uses Gemini.
 
 ## Requirements
 

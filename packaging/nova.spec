@@ -12,7 +12,7 @@ VERSION = __version__.split(".dev")[0]  # macOS expects plain numbers, e.g. 1.0.
 a = Analysis(
     [str(Path(SPECPATH) / "nova_app.py")],
     pathex=[str(ROOT / "src")],
-    excludes=["tkinter"],
+    excludes=["tkinter", "mlx", "mlx_whisper"],  # local transcription is source-only
 )
 pyz = PYZ(a.pure)
 exe = EXE(

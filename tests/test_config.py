@@ -173,3 +173,21 @@ def test_missing_key_message_names_both_settings_locations():
         load_config({"GEMINI_MODEL": "m"})
     assert ".env" in str(error.value)
     assert "config.env" in str(error.value)
+
+
+def test_transcriber_defaults_to_gemini():
+    config = load_config(VALID_ENV)
+    assert config.transcriber == "gemini"
+    assert "whisper" in config.local_model
+
+
+def test_local_transcriber_and_model_can_be_selected():
+    env = {**VALID_ENV, "NOVA_TRANSCRIBER": "LOCAL", "NOVA_LOCAL_MODEL": "some/model"}
+    config = load_config(env)
+    assert config.transcriber == "local"
+    assert config.local_model == "some/model"
+
+
+def test_unknown_transcriber_is_rejected():
+    with pytest.raises(ConfigError, match="NOVA_TRANSCRIBER"):
+        load_config({**VALID_ENV, "NOVA_TRANSCRIBER": "siri"})
