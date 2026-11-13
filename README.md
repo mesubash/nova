@@ -4,7 +4,9 @@
 
 A macOS-first personal AI voice assistant, built as a learning project on a MacBook Air M4.
 
-**Status:** V0.4, typed and spoken conversation with Gemini in the terminal and in a desktop window. Desktop actions and personal notes are planned; see [docs/PLAN.md](docs/PLAN.md).
+**Status:** V1.0. A personal voice assistant for macOS with typed and spoken conversation, a desktop window, confirmed desktop actions, and persistent notes. Built as a learning project; see [docs/PLAN.md](docs/PLAN.md) and [docs/architecture.md](docs/architecture.md).
+
+![NOVA desktop window](docs/images/nova-window.png)
 
 ## What works now
 
@@ -17,6 +19,30 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 - Press Enter on an empty line to ask by voice; press Enter again to stop recording.
 - Recordings stop automatically after `NOVA_MAX_RECORDING_SECONDS`; silence is detected without calling the API.
 - Desktop window (`nova-gui`) with transcript, hold-to-talk, stop speaking (Esc), and visible status; it stays responsive during requests.
+
+## Performance
+
+Measured on 2026-11-13 with `scripts/measure_latency.py` on a MacBook Air M4 over home Wi-Fi in Nepal, using `gemini-3.5-flash-lite` (8 runs; 1 further run hit the free-tier rate limit):
+
+| Step | Median | Fastest | Slowest |
+| --- | --- | --- | --- |
+| Transcription | 2.27 s | 1.56 s | 2.55 s |
+| Model reply | 1.21 s | 0.93 s | 2.13 s |
+| Speech start | 0.01 s | 0.00 s | 0.01 s |
+| **Total: release Talk → speech starts** | **3.40 s** | 2.70 s | 4.35 s |
+
+"Speech start" is when the `say` process is launched, not when sound is first heard. Network conditions and Gemini's load change these numbers; rerun the script to measure your own setup. The packaged app is 134 MB, mostly the Qt framework.
+
+## Limitations
+
+- macOS on Apple Silicon only; tested on a MacBook Air M4.
+- Requires an internet connection: chat and transcription both use Gemini.
+- Gemini's free tier allows 15 requests per minute for this model. A voice question uses two (transcribe, then answer); beyond the limit NOVA shows a rate-limit error.
+- Push-to-talk only: no wake word, and you cannot interrupt NOVA by speaking.
+- One action per request. Action results and notes are not sent back to the model, so it cannot reason about them (for example, which file is newest).
+- Note search matches keywords, not meaning.
+- The API key is stored in a private file rather than the macOS Keychain.
+- The app is not signed with a Developer ID or notarized.
 
 ## Requirements
 

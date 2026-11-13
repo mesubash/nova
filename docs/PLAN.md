@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V0.4 complete (desktop interface). V0.5 (controlled desktop actions) is next.
+Status: V1.0 released. All planned milestones are complete.
 
 ## Purpose
 
@@ -132,7 +132,7 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [x] V0.4 Small desktop interface
 - [ ] V0.5 Controlled desktop actions
 - [ ] V0.6 Persistent notes
-- [ ] V1.0 Portfolio release
+- [x] V1.0 Portfolio release
 
 ## After V1.0 (optional, one at a time)
 
@@ -150,4 +150,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-Implement V0.5: Gemini function calling for opening allowlisted apps, validated URLs, and filename search in an approved folder, with application-side validation and confirmation before side effects.
+V1.0 is complete. If development continues, choose one option from "After V1.0", for example local transcription to reduce the measured 2.3-second transcription time, and plan it as its own milestone.
