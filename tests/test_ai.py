@@ -8,6 +8,8 @@ from nova.ai import (
     MAX_ATTEMPTS,
     RETRY_DELAY_SECONDS,
     SYSTEM_INSTRUCTION,
+    NO_SPEECH,
+    TRANSCRIBE_PROMPT,
     AIError,
     GeminiClient,
     Message,
@@ -16,6 +18,7 @@ from nova.config import Config
 
 CONFIG = Config(api_key="test-key", model="test-model")
 HISTORY = [Message("user", "Hi"), Message("assistant", "Hello!"), Message("user", "And?")]
+WAV = b"RIFF-fake-wav-bytes"
 
 
 def server_error(code=503):
@@ -124,3 +127,32 @@ def test_reply_sends_spoken_style_system_instruction():
     client.reply(HISTORY)
     config = fake.models.generate_content.call_args.kwargs["config"]
     assert config.system_instruction == SYSTEM_INSTRUCTION
+
+
+def test_transcribe_sends_prompt_and_audio_without_chat_instruction():
+    client, fake, _ = make_client(return_value=Mock(text="what time is it"))
+    assert client.transcribe(WAV) == "what time is it"
+    kwargs = fake.models.generate_content.call_args.kwargs
+    parts = kwargs["contents"][0].parts
+    assert parts[0].text == TRANSCRIBE_PROMPT
+    assert parts[1].inline_data.mime_type == "audio/wav"
+    assert parts[1].inline_data.data == WAV
+    assert kwargs["config"].system_instruction is None
+
+
+@pytest.mark.parametrize("text", [NO_SPEECH, NO_SPEECH.upper(), "", None])
+def test_transcribe_returns_empty_string_when_no_speech(text):
+    client, _, _ = make_client(return_value=Mock(text=text))
+    assert client.transcribe(WAV) == ""
+
+
+def test_transcribe_retries_transient_errors():
+    client, fake, _ = make_client(side_effect=[server_error(), Mock(text="hello")])
+    assert client.transcribe(WAV) == "hello"
+    assert fake.models.generate_content.call_count == 2
+
+
+def test_transcribe_rejects_empty_audio():
+    client, _, _ = make_client()
+    with pytest.raises(ValueError):
+        client.transcribe(b"")
