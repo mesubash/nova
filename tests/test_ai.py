@@ -3,9 +3,15 @@ from unittest.mock import Mock
 import httpx2
 import pytest
 from google.genai import errors
-from nova.ai import SYSTEM_INSTRUCTION
 
-from nova.ai import MAX_ATTEMPTS, RETRY_DELAY_SECONDS, AIError, GeminiClient, Message
+from nova.ai import (
+    MAX_ATTEMPTS,
+    RETRY_DELAY_SECONDS,
+    SYSTEM_INSTRUCTION,
+    AIError,
+    GeminiClient,
+    Message,
+)
 from nova.config import Config
 
 CONFIG = Config(api_key="test-key", model="test-model")
