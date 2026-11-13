@@ -86,3 +86,21 @@ Server load varies over time; rerun the benchmark before changing models.
 **Action results are not sent back to the model.** The outcome message is already exact, it avoids a second request, and file names from disk never reach Gemini, which removes a prompt-injection path. Trade-off: the model cannot reason about search results.
 
 **History records what actually happened.** A proposed action is added to the conversation only after its outcome (opened, failed, rejected, or cancelled) is known. One action per turn.
+
+## V0.6: Persistent notes (2026-11-13)
+
+**SQLite in `~/Library/Application Support/NOVA/notes.db`.** The standard macOS location for app data, outside the repository so notes can never be committed. Overridable with `NOVA_DATA_DIR`. The folder is created on first use with mode 700 and the database file is set to 600.
+
+**Stable IDs.** `INTEGER PRIMARY KEY AUTOINCREMENT` never reuses a deleted note's number, so "note 3" always means the same note.
+
+**No silent data loss.** Each operation opens its own connection inside a transaction: it commits on success and rolls back on any error. Updates and deletes that match no row raise `NoteNotFound` instead of reporting success. All database errors become a visible `StorageError`; if the database cannot be opened, NOVA starts with notes disabled and says so.
+
+**One connection per operation.** Avoids SQLite's same-thread restriction, since the window executes actions on a background thread.
+
+**Keyword search.** Every word must appear, ignoring case. `%` and `_` are escaped so they match literally. All values use `?` placeholders; the only SQL built with string formatting is fixed text written in the code.
+
+**Notes use the action pipeline.** Five actions (save, list, search, edit, delete) reuse V0.5's validate, confirm, execute flow. Saving, editing, and deleting always ask first; listing and searching are read-only. Edit and delete check that the note exists during validation, so confirmations show the note's current text and never refer to a missing note.
+
+**Explicit saving only.** Notes are saved only through a confirmed `save_note`; nothing is inferred or stored automatically.
+
+**Stored notes are never sent to Gemini.** Listing and searching run locally and the results are not returned to the model. The only note text Gemini receives is what the user says or types while asking to save or edit a note.

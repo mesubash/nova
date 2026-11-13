@@ -87,3 +87,20 @@ def test_search_folder_is_resolved(tmp_path):
 def test_missing_search_folder_is_a_config_error(tmp_path):
     with pytest.raises(ConfigError, match="NOVA_SEARCH_FOLDER"):
         load_config({**VALID_ENV, "NOVA_SEARCH_FOLDER": str(tmp_path / "missing")})
+
+
+def test_data_dir_defaults_to_application_support():
+    config = load_config(VALID_ENV)
+    assert config.data_dir.parts[-3:] == ("Library", "Application Support", "NOVA")
+
+
+def test_data_dir_can_be_overridden(tmp_path):
+    config = load_config({**VALID_ENV, "NOVA_DATA_DIR": str(tmp_path / "nova-data")})
+    assert config.data_dir == (tmp_path / "nova-data").resolve()
+
+
+def test_data_dir_cannot_be_a_file(tmp_path):
+    existing_file = tmp_path / "file.txt"
+    existing_file.write_text("x")
+    with pytest.raises(ConfigError, match="NOVA_DATA_DIR"):
+        load_config({**VALID_ENV, "NOVA_DATA_DIR": str(existing_file)})

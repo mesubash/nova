@@ -1,4 +1,4 @@
-"""Validated desktop actions. The model proposes; this package decides and executes."""
+"""Validated actions. The model proposes; this package decides and executes."""
 
 from nova.actions.execute import ActionResult, execute
 from nova.actions.flow import CANCELLED, rejection, run_action
@@ -7,9 +7,14 @@ from nova.actions.validate import (
     ActionPolicy,
     ActionRejected,
     ActionRequest,
+    DeleteNote,
+    EditNote,
+    ListNotes,
     OpenApp,
     OpenUrl,
+    SaveNote,
     SearchFiles,
+    SearchNotes,
     validate,
 )
 
@@ -20,9 +25,14 @@ __all__ = [
     "ActionRejected",
     "ActionRequest",
     "ActionResult",
+    "DeleteNote",
+    "EditNote",
+    "ListNotes",
     "OpenApp",
     "OpenUrl",
+    "SaveNote",
     "SearchFiles",
+    "SearchNotes",
     "execute",
     "rejection",
     "run_action",

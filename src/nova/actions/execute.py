@@ -6,11 +6,23 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from nova.actions.validate import Action, OpenApp, OpenUrl, SearchFiles
+from nova.actions.validate import (
+    Action,
+    DeleteNote,
+    EditNote,
+    ListNotes,
+    OpenApp,
+    OpenUrl,
+    SaveNote,
+    SearchFiles,
+    SearchNotes,
+)
+from nova.storage import Note, StorageError
 
 OPEN_TIMEOUT_SECONDS = 10
 MAX_RESULTS = 20
 MAX_FILES_SCANNED = 20_000
+NOTES_SHOWN = 20
 
 
 @dataclass(frozen=True)
@@ -33,7 +45,15 @@ def execute(action: Action, run: Runner = subprocess.run) -> ActionResult:
             return _open(["open", url], f"Opened {url}.", run)
         case SearchFiles():
             return search_files(action)
+        case SaveNote() | ListNotes() | SearchNotes() | EditNote() | DeleteNote():
+            try:
+                return _note_action(action)
+            except StorageError as exc:
+                return ActionResult(False, str(exc))
     raise TypeError(f"Not a validated action: {action!r}")
+
+
+# Desktop actions
 
 
 def _open(command: list[str], success: str, run: Runner) -> ActionResult:
@@ -88,3 +108,48 @@ def _iter_files(root: Path, max_scanned: int) -> Iterator[Path]:
             if scanned > max_scanned:
                 return
             yield Path(dirpath, name)
+
+
+# Note actions
+
+
+def _note_action(
+    action: SaveNote | ListNotes | SearchNotes | EditNote | DeleteNote,
+) -> ActionResult:
+    match action:
+        case SaveNote():
+            note = action.store.add(action.text)
+            return ActionResult(True, f"Saved note #{note.id}.")
+        case ListNotes():
+            notes = action.store.recent(NOTES_SHOWN)
+            if not notes:
+                return ActionResult(True, "You have no notes yet.")
+            return ActionResult(
+                True, f"Showing your {len(notes)} most recent {_noun(notes)}.", _lines(notes)
+            )
+        case SearchNotes():
+            notes = action.store.search(action.query)
+            if not notes:
+                return ActionResult(True, f'No notes contain "{action.query}".')
+            return ActionResult(
+                True,
+                f'Found {len(notes)} {_noun(notes)} containing "{action.query}".',
+                _lines(notes),
+            )
+        case EditNote():
+            action.store.update(action.note_id, action.text)
+            return ActionResult(True, f"Updated note #{action.note_id}.")
+        case DeleteNote():
+            action.store.delete(action.note_id)
+            return ActionResult(True, f"Deleted note #{action.note_id}.")
+    raise TypeError(f"Not a note action: {action!r}")
+
+
+def _noun(notes: list[Note]) -> str:
+    return "note" if len(notes) == 1 else "notes"
+
+
+def _lines(notes: list[Note]) -> tuple[str, ...]:
+    return tuple(
+        f"#{note.id} · {note.updated_at.astimezone():%d %b %Y} · {note.text}" for note in notes
+    )

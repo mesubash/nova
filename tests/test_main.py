@@ -7,6 +7,7 @@ from nova.actions import CANCELLED, ActionPolicy, ActionRequest, ActionResult, O
 from nova.ai import AIError
 from nova.config import Config, ConfigError
 from nova.speech import RecordingError, SpeechError
+from nova.storage import StorageError
 
 
 class FakeConversation:
@@ -275,3 +276,13 @@ def test_disallowed_app_is_rejected_and_reported():
     assert execute_action.actions == []
     assert any("can't do that" in line for line in output)
     assert output[-1] == "Goodbye."
+
+
+def test_unavailable_notes_do_not_stop_startup(monkeypatch, capsys, tmp_path):
+    def broken_store(path):
+        raise StorageError("disk full")
+
+    monkeypatch.setattr(app, "NoteStore", broken_store)
+    config = Config(api_key="k", model="m", data_dir=tmp_path)
+    assert app._open_notes(config) is None
+    assert "disk full" in capsys.readouterr().err
