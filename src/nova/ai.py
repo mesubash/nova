@@ -17,6 +17,11 @@ MAX_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 1.0
 _RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 _GEMINI_ROLES = {"user": "user", "assistant": "model"}
+SYSTEM_INSTRUCTION = (
+    "You are NOVA, a personal voice assistant. Your replies are read aloud, so answer "
+    "in short, natural spoken sentences, usually one to three. Do not use markdown, "
+    "bullet points, tables, emoji, or code blocks unless the user asks for them."
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +47,8 @@ class GeminiClient:
     ) -> None:
         self._model = config.model
         self._sleep = sleep
+        self._generate_config = types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION)
+
         self._client = client or genai.Client(
             api_key=config.api_key,
             http_options=types.HttpOptions(timeout=int(config.request_timeout_seconds * 1000)),
@@ -67,7 +74,9 @@ class GeminiClient:
 
     def _request_once(self, contents: list[types.Content]) -> str:
         try:
-            response = self._client.models.generate_content(model=self._model, contents=contents)
+            response = self._client.models.generate_content(
+                model=self._model, contents=contents, config=self._generate_config
+            )
         except httpx2.TimeoutException as exc:
             raise AIError("The request timed out. Please try again.") from exc
         except httpx2.TransportError as exc:

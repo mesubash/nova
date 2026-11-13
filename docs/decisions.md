@@ -32,3 +32,13 @@ Server load varies over time; rerun the benchmark before changing models.
 **Catch `httpx2` exceptions.** google-genai 3.x sends requests through httpx2; catching `httpx` exceptions would miss real timeouts and connection failures.
 
 **Failed turns are not stored in history.** If a request fails or is cancelled with Ctrl+C, the unanswered question is not added, so the next request has a clean context.
+
+## V0.2: Spoken output (2026-11-13)
+
+**Text reaches `say` through stdin, never as an argument.** An argument list without a shell prevents command injection; stdin additionally prevents answer text from being read as a `say` option.
+
+**Speech plays in the background with `Popen`.** The prompt returns immediately, so pressing Enter or typing `/stop` can interrupt playback. Starting a new question stops any current speech first.
+
+**Text is printed before speech starts.** A speech failure therefore can never hide the answer.
+
+**A system instruction asks for short spoken-style answers without markdown.** `to_speakable()` removes any remaining markdown symbols as a safety net.
