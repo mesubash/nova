@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-import httpx
+import httpx2
 import pytest
 from google.genai import errors
 
@@ -34,8 +34,8 @@ def test_reply_sends_model_and_mapped_roles():
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
-        (httpx.ReadTimeout("slow"), "timed out"),
-        (httpx.ConnectError("offline"), "internet connection"),
+        (httpx2.ReadTimeout("slow"), "timed out"),
+        (httpx2.ConnectError("offline"), "internet connection"),
         (
             errors.ClientError(
                 400, {"error": {"code": 400, "message": "bad key", "status": "INVALID_ARGUMENT"}}
