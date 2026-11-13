@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.0 released. All planned milestones are complete.
+Status: V1.0 released. V1.1 (local transcription) in progress.
 
 ## Purpose
 
@@ -92,6 +92,12 @@ Known packaging requirements:
 
 Complete when a clean setup follows the README, the main demo succeeds repeatedly, important error paths work, tests and lint checks pass, and planned versus implemented capabilities are accurate in documentation.
 
+### V1.1 — Local transcription
+
+Transcribe voice questions on the Mac with Whisper running on Apple's MLX framework, instead of sending audio to Gemini. The backend is selected with `NOVA_TRANSCRIBER` (`gemini` or `local`) and the model with a setting. Choose the default model by measuring candidates on the M4. Load the model once and reuse it; the first use may download it from Hugging Face.
+
+Complete when local transcription can be selected without code changes; latency and accuracy are measured against Gemini with the same audio and recorded; silence and noise do not produce invented text; a missing or failed model gives a clear error and typed input still works; tests use a fake model; and the documentation states the model size, the one-time download, and that local transcription keeps audio on the Mac.
+
 ## Application design
 
 Start with one package and a small entry point. Introduce modules only when their milestones begin:
@@ -133,6 +139,7 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [ ] V0.5 Controlled desktop actions
 - [ ] V0.6 Persistent notes
 - [x] V1.0 Portfolio release
+- [ ] V1.1 Local transcription
 
 ## After V1.0 (optional, one at a time)
 
@@ -150,4 +157,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-V1.0 is complete. If development continues, choose one option from "After V1.0", for example local transcription to reduce the measured 2.3-second transcription time, and plan it as its own milestone.
+Measure mlx-whisper model sizes on the M4 (speed, accuracy, and behaviour on noise) before integrating a local transcriber.
