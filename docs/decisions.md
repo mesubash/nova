@@ -42,3 +42,19 @@ Server load varies over time; rerun the benchmark before changing models.
 **Text is printed before speech starts.** A speech failure therefore can never hide the answer.
 
 **A system instruction asks for short spoken-style answers without markdown.** `to_speakable()` removes any remaining markdown symbols as a safety net.
+
+## V0.3: Voice input (2026-11-13)
+
+**Toggle push-to-talk in the terminal.** An empty Enter starts recording, Enter stops it. Hold-to-talk is deferred to the desktop window, because detecting a held key in a terminal needs Accessibility permission.
+
+**`sounddevice` at 16 kHz mono.** Avoids PyAudio's installation problems on Apple Silicon; 16 kHz mono is the standard speech format and keeps uploads small (about 32 KB per second).
+
+**Gemini transcribes the audio.** One provider and no extra dependency. A `[no speech]` marker lets the model report silence instead of inventing text; transcription uses `temperature=0` and no chat system instruction.
+
+**Audio stays in memory.** It is encoded to WAV with `io.BytesIO` and never written to disk.
+
+**Speech always stops before recording starts**, so NOVA cannot transcribe its own voice.
+
+**Silence and permission checks before uploading.** A recording of exact zeros usually means macOS denied the microphone (it does not raise an error), so the user is pointed to Privacy & Security. A recording whose loudest sample is below `SILENCE_PEAK` (0.02) is treated as silence without calling the API. The threshold is a starting value to tune with measurements.
+
+**Recording length is bounded** by `NOVA_MAX_RECORDING_SECONDS` (default 30), enforced in the audio callback; waiting for Enter uses `select` with the same timeout.

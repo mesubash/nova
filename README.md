@@ -12,6 +12,8 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 - `/exit`, Ctrl+D or Ctrl+C to quit; Ctrl+C while waiting cancels only that question.
 - Answers are spoken aloud with macOS `say` while the text stays visible.
 - Press Enter or type `/stop` to stop speaking.
+- Press Enter on an empty line to ask by voice; press Enter again to stop recording.
+- Recordings stop automatically after `NOVA_MAX_RECORDING_SECONDS`; silence is detected without calling the API.
 
 ## Requirements
 
