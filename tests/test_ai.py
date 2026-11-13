@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import httpx2
 import pytest
 from google.genai import errors
+from nova.ai import SYSTEM_INSTRUCTION
 
 from nova.ai import MAX_ATTEMPTS, RETRY_DELAY_SECONDS, AIError, GeminiClient, Message
 from nova.config import Config
@@ -110,3 +111,10 @@ def test_timeout_is_passed_in_milliseconds(monkeypatch):
     monkeypatch.setattr("nova.ai.genai.Client", fake_class)
     GeminiClient(Config(api_key="k", model="m", request_timeout_seconds=2.5))
     assert fake_class.call_args.kwargs["http_options"].timeout == 2500
+
+
+def test_reply_sends_spoken_style_system_instruction():
+    client, fake, _ = make_client(return_value=Mock(text="ok"))
+    client.reply(HISTORY)
+    config = fake.models.generate_content.call_args.kwargs["config"]
+    assert config.system_instruction == SYSTEM_INSTRUCTION
