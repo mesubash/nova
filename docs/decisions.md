@@ -104,3 +104,15 @@ Server load varies over time; rerun the benchmark before changing models.
 **Explicit saving only.** Notes are saved only through a confirmed `save_note`; nothing is inferred or stored automatically.
 
 **Stored notes are never sent to Gemini.** Listing and searching run locally and the results are not returned to the model. The only note text Gemini receives is what the user says or types while asking to save or edit a note.
+
+## V1.0: Portfolio release (2026-11-13)
+
+**CI on macOS.** GitHub Actions runs `ruff format --check`, `ruff check`, and `pytest` on every push to `main` and every pull request, on Apple Silicon, installing from `requirements.lock` exactly as the README describes.
+
+**Settings for the packaged app.** A `.app` launched from Finder has no shell environment and starts in `/`, so settings are also read from `~/Library/Application Support/NOVA/config.env`. Precedence: process environment, then project `.env`, then the user file. The file is created atomically with mode 600 and its permissions are tightened if loosened. The macOS Keychain would be stronger and remains a possible improvement.
+
+**PyInstaller, Apple Silicon only, ad-hoc signed.** The build is defined in `packaging/nova.spec`. `Info.plist` includes `NSMicrophoneUsageDescription`, without which macOS silently denies the microphone. The app is not signed with a Developer ID or notarized.
+
+**Latency measured, not estimated.** `scripts/measure_latency.py` replays questions generated with `say` as 16 kHz WAV through the real pipeline. Median total wait after releasing Talk: 3.40 s (2.70 to 4.35 s); transcription is the largest share. "Speech start" measures when `say` is launched, not when sound is first heard.
+
+**Rate limits are reported, not retried.** HTTP 429 is a client error and is shown to the user. On the free tier (15 requests per minute for `gemini-3.5-flash-lite`), a voice question uses two requests.

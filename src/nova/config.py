@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
+from dotenv import dotenv_values, find_dotenv
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_HISTORY_TURNS = 10
@@ -38,8 +38,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
     and reads the process environment. Tests pass a plain dict instead.
     """
     if env is None:
-        load_dotenv(find_dotenv(usecwd=True))
-        env = os.environ
+        env = _environment()
 
     return Config(
         api_key=_require(env, "GEMINI_API_KEY"),
@@ -60,7 +59,10 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
 def _require(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "").strip()
     if not value:
-        raise ConfigError(f"{name} is not set. Copy .env.example to .env and set {name}.")
+        raise ConfigError(
+            f"{name} is not set. Add it to .env in the project folder, "
+            f"or to {user_config_path()} for the desktop app."
+        )
     return value
 
 
@@ -113,3 +115,64 @@ def _data_dir(env: Mapping[str, str], name: str) -> Path:
     if folder.exists() and not folder.is_dir():
         raise ConfigError(f"{name} must be a folder, got {raw!r}.")
     return folder
+
+
+# Settings files
+
+USER_CONFIG_FILENAME = "config.env"
+USER_CONFIG_TEMPLATE = """\
+# NOVA settings for the desktop app.
+# Only your macOS user can read this file. Never share it or commit it.
+
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+# Optional
+# NOVA_ALLOWED_APPS=Safari,Notes,Calendar,Music,Calculator,TextEdit,Finder
+# NOVA_SEARCH_FOLDER=~/Documents
+"""
+
+
+def user_config_path() -> Path:
+    """The settings file used by the packaged app, next to the notes database."""
+    return DEFAULT_DATA_DIR.expanduser() / USER_CONFIG_FILENAME
+
+
+def ensure_user_config(path: Path | None = None) -> Path:
+    """Create a private settings template if none exists. Never overwrites."""
+    path = path or user_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return path
+    with os.fdopen(descriptor, "w") as file:
+        file.write(USER_CONFIG_TEMPLATE)
+    return path
+
+
+def _environment(environ: Mapping[str, str] = os.environ) -> dict[str, str]:
+    """Merge settings. Precedence: process environment > project .env > user config file."""
+    merged: dict[str, str] = {}
+    user_file = user_config_path()
+    if user_file.is_file():
+        _make_private(user_file)
+        merged.update(_values(user_file))
+    project_file = find_dotenv(usecwd=True)
+    if project_file:
+        merged.update(_values(Path(project_file)))
+    merged.update(environ)
+    return merged
+
+
+def _values(path: Path) -> dict[str, str]:
+    return {key: value for key, value in dotenv_values(path).items() if value is not None}
+
+
+def _make_private(path: Path) -> None:
+    """Ensure a file holding secrets is readable only by its owner."""
+    if path.stat().st_mode & 0o077:
+        try:
+            path.chmod(0o600)
+        except OSError as exc:
+            raise ConfigError(f"Could not restrict permissions on {path}: {exc}") from exc

@@ -1,5 +1,6 @@
 import pytest
 
+from nova import config as config_module
 from nova.config import (
     DEFAULT_MAX_HISTORY_TURNS,
     DEFAULT_MAX_RECORDING_SECONDS,
@@ -104,3 +105,71 @@ def test_data_dir_cannot_be_a_file(tmp_path):
     existing_file.write_text("x")
     with pytest.raises(ConfigError, match="NOVA_DATA_DIR"):
         load_config({**VALID_ENV, "NOVA_DATA_DIR": str(existing_file)})
+
+
+# Settings files
+
+
+@pytest.fixture
+def settings_files(monkeypatch, tmp_path):
+    user_file = tmp_path / "support" / "config.env"
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(config_module, "user_config_path", lambda: user_file)
+    monkeypatch.chdir(project)
+    return user_file, project
+
+
+def write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_desktop_app_reads_user_config_file(settings_files):
+    user_file, _ = settings_files
+    write(user_file, "GEMINI_API_KEY=file-key\nGEMINI_MODEL=file-model\n")
+    config = load_config(config_module._environment({}))
+    assert (config.api_key, config.model) == ("file-key", "file-model")
+
+
+def test_project_env_overrides_user_file(settings_files):
+    user_file, project = settings_files
+    write(user_file, "GEMINI_API_KEY=file-key\nGEMINI_MODEL=file-model\n")
+    write(project / ".env", "GEMINI_MODEL=project-model\n")
+    env = config_module._environment({})
+    assert env["GEMINI_MODEL"] == "project-model"
+    assert env["GEMINI_API_KEY"] == "file-key"
+
+
+def test_process_environment_overrides_both_files(settings_files):
+    user_file, project = settings_files
+    write(user_file, "GEMINI_MODEL=file-model\n")
+    write(project / ".env", "GEMINI_MODEL=project-model\n")
+    env = config_module._environment({"GEMINI_MODEL": "shell-model"})
+    assert env["GEMINI_MODEL"] == "shell-model"
+
+
+def test_user_config_permissions_are_tightened(settings_files):
+    user_file, _ = settings_files
+    write(user_file, "GEMINI_API_KEY=secret\n")
+    user_file.chmod(0o644)
+    config_module._environment({})
+    assert user_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_template_is_created_private_and_never_overwritten(tmp_path):
+    path = tmp_path / "NOVA" / "config.env"
+    assert config_module.ensure_user_config(path) == path
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert "GEMINI_API_KEY=" in path.read_text()
+
+    path.write_text("GEMINI_API_KEY=mine\n")
+    config_module.ensure_user_config(path)
+    assert path.read_text() == "GEMINI_API_KEY=mine\n"
+
+
+def test_missing_key_message_names_both_settings_locations():
+    with pytest.raises(ConfigError) as error:
+        load_config({"GEMINI_MODEL": "m"})
+    assert ".env" in str(error.value)
+    assert "config.env" in str(error.value)
