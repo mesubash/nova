@@ -104,7 +104,9 @@ def propose(client: GeminiClient, text: str, policy: ActionPolicy) -> tuple[Acti
         action = validate(reply, policy)
     except ActionRejected as exc:
         return None, f"rejected {reply.name} {reply.args}: {exc}"
-    return action, action.describe()
+    return action, action.describe().replace(
+        str(policy.search_folder.resolve()), "the approved folder"
+    )
 
 
 def compare() -> None:
@@ -142,9 +144,12 @@ def compare() -> None:
                 try:
                     pace()
                     row["heard"] = client.transcribe(wav)
-                    pace()
-                    action, row["spoken"] = propose(client, row["heard"], policy)
-                    row["spoken_ok"] = matches(action, expected)
+                    if row["heard"]:
+                        pace()
+                        action, row["spoken"] = propose(client, row["heard"], policy)
+                        row["spoken_ok"] = matches(action, expected)
+                    else:  # the app asks the user to try again; nothing reaches the model
+                        row["spoken"], row["spoken_ok"] = "no speech heard", False
                     pace()
                     action, row["typed"] = propose(client, phrase, policy)
                     row["typed_ok"] = matches(action, expected)
