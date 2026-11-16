@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.3 released.
+Status: V1.3 released; V1.4 in progress.
 
 ## Purpose
 
@@ -110,6 +110,14 @@ Let the user speak and type in Nepali, English, or a mix, and answer in the same
 
 Complete when Nepali and mixed questions are transcribed with measured accuracy on record; NOVA answers in the language of the question; spoken output uses a suitable voice for Devanagari text or explains why it is silent; actions and notes work with Nepali text; tests cover language and voice selection; and the documentation states the measured results and limits.
 
+### V1.4 — Nepali voice commands
+
+V1.3 measured transcription word by word, which overstates the problem for commands: `safari खोल्नुस्` is a transcription error but still asks for the right action. Measure what matters instead: does a spoken Nepali or mixed command lead to the intended action proposal? Record a command set in the developer's voice (open apps, open sites, save/show/find/delete notes, folder search, including English names such as Safari and GitHub), run each through transcription and the model, and compare the proposed action and arguments with the expected one. Nothing is executed.
+
+Decide any fix only after this baseline, with an adoption rule fixed before measuring. Candidates, smallest first: naming the allowed apps and common command words in the Nepali-mode transcription prompt; teaching the system instruction that romanised or misspelled names refer to allowed apps. English mode stays unchanged unless its own measurement shows no regression.
+
+Complete when the command baseline and any re-measurement are recorded with per-phrase results; any change is adopted only by its pre-stated rule; misheard commands still never run without confirmation; tests cover any changed prompt or name handling; and the documentation states the measured command success rate and remaining limits.
+
 ## Application design
 
 Start with one package and a small entry point. Introduce modules only when their milestones begin:
@@ -154,14 +162,13 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [x] V1.1 Local transcription
 - [x] V1.2 Safety and accuracy evidence
 - [x] V1.3 Nepali and English
+- [ ] V1.4 Nepali voice commands
 
 ## After V1.0 (optional, one at a time)
 
 Each option is chosen for what it teaches, not for novelty:
 
 - Fully local mode: local Whisper and a small local model on the M4, benchmarked against Gemini using recorded measurements.
-- Nepali/English mixed speech support.
-- An adversarial test suite that attempts to trick the action layer into unapproved apps, URLs, or paths, verifying validation holds.
 
 ## Deferred features
 
@@ -171,4 +178,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-Measure mlx-whisper model sizes on the M4 (speed, accuracy, and behaviour on noise) before integrating a local transcriber.
+Write the V1.4 command phrase set with expected actions, record it, and measure the baseline command success rate before changing any prompt.
