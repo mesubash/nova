@@ -154,3 +154,11 @@ Server load varies over time; rerun the benchmark before changing models.
 **Devanagari answers use a Hindi voice.** macOS has no Nepali voice; a Hindi voice (default `Lekha`, configurable with `NOVA_DEVANAGARI_VOICE`) reads Devanagari with Hindi pronunciation, judged understandable by the developer. Availability is checked once with `say -v ?`; if the voice is missing, the answer is shown as text with an explanation.
 
 **Known limit: Nepali commands.** Only 3 of 12 Nepali phrases were transcribed exactly, with most errors in commands mixing in English words. Misrecognition cannot cause unintended actions: anything with side effects shows the exact action for confirmation first.
+
+## V1.4: Nepali voice commands (2026-11-16)
+
+**Commands are scored by the action they lead to, not by exact transcription.** `scripts/command_benchmark.py` transcribes 16 recorded Nepali commands in Nepali mode, sends each transcript to the model, and compares the validated action with the expected one. The typed phrase is also sent, to separate transcription failures from understanding failures. Nothing is executed.
+
+**Baseline: spoken 6 of 15, typed 16 of 16.** The model understood every typed command, so every failure came from transcription; the fix belongs in the Nepali-mode transcription prompt, not the system instruction. Recording #1 was near-silent (RMS 44 against 560–1400 for the others) and was heard as nothing, so it is excluded from the spoken count. That run also sent its empty transcript to the model; the script now scores an empty transcript as missed. Results: `docs/command-results-baseline.md`.
+
+**Adoption rule, fixed before measuring the fix.** A new Nepali-mode transcription prompt is adopted only if, on the same recordings, spoken commands improve by at least 2 and neither plain question (#15, #16) proposes an action. English mode is unaffected because the prompt is used only when `NOVA_SPEECH_LANGUAGE=ne`.
