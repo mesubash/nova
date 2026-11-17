@@ -82,8 +82,8 @@ def _require(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "").strip()
     if not value:
         raise ConfigError(
-            f"{name} is not set. Add it to .env in the project folder, "
-            f"or to {user_config_path()} for the desktop app."
+            f"{name} is not set. Add it to {user_config_path()}, "
+            "or to a .env file in the folder you run NOVA from."
         )
     return value
 
@@ -143,7 +143,7 @@ def _data_dir(env: Mapping[str, str], name: str) -> Path:
 
 USER_CONFIG_FILENAME = "config.env"
 USER_CONFIG_TEMPLATE = """\
-# NOVA settings for the desktop app.
+# NOVA settings, used by the desktop app and the nova command.
 # Only your macOS user can read this file. Never share it or commit it.
 
 GEMINI_API_KEY=
