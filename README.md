@@ -8,6 +8,14 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 
 ![NOVA desktop window](docs/images/nova-window.png)
 
+## Highlights
+
+- **The model proposes, NOVA decides.** Gemini can only suggest one of eight declared actions; code validates every argument, and anything with side effects is shown and confirmed first. 30 live attack prompts, including prompt injection, produced [0 violations](docs/adversarial-results.md).
+- **Measured, not claimed.** Latency, transcription accuracy on a real voice, and Nepali command success are measured with scripts in `scripts/` and recorded in `docs/`. Decisions such as the default transcriber were made by rules written down before measuring ([decisions](docs/decisions.md)).
+- **English and Nepali.** Speak or type either language or a mix; spoken Nepali commands were improved from 6 to 9 of 15 by a measured prompt change ([results](docs/command-results.md)).
+- **Private where it can be.** Notes stay on the Mac and are never sent to Gemini; optional local Whisper keeps audio on the Mac too.
+- **Built in small, tested steps.** One milestone at a time ([plan](docs/PLAN.md)), 300+ tests with fake clients, CI on every change, and an [architecture overview](docs/architecture.md).
+
 ## Install
 
 You need a Mac with Apple Silicon and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/).
