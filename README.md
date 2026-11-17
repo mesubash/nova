@@ -8,6 +8,34 @@ A macOS-first personal AI voice assistant, built as a learning project on a MacB
 
 ![NOVA desktop window](docs/images/nova-window.png)
 
+## Install
+
+You need a Mac with Apple Silicon and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/).
+
+### Download the app
+
+1. Download `NOVA-<version>-arm64.zip` from the [latest release](https://github.com/mesubash/nova/releases/latest) and unzip it.
+2. Move `NOVA.app` to Applications.
+3. The app is not signed or notarized, so the first time, right-click it and choose **Open**, then confirm. (Or allow it in System Settings › Privacy & Security.)
+4. On first launch NOVA says its settings are missing. Click **Open settings file**: it creates `~/Library/Application Support/NOVA/config.env` and opens it. Put your key after `GEMINI_API_KEY=`, save, and open NOVA again.
+5. Allow microphone access when asked.
+
+### Command line, with pipx
+
+```bash
+pipx install --python python3.12 "git+https://github.com/mesubash/nova.git@v1.4.0"
+```
+
+This installs `nova` (terminal chat) and `nova-gui` (desktop window). Put your settings in `~/Library/Application Support/NOVA/config.env`, the same file the app uses:
+
+```bash
+mkdir -p ~/Library/Application\ Support/NOVA
+printf 'GEMINI_API_KEY=your-key\nGEMINI_MODEL=gemini-3.5-flash-lite\n' > ~/Library/Application\ Support/NOVA/config.env
+chmod 600 ~/Library/Application\ Support/NOVA/config.env
+```
+
+`uv tool install --python 3.12 "git+https://github.com/mesubash/nova.git@v1.4.0"` works the same way. To develop NOVA, see [Setup from source](#setup-from-source).
+
 ## What works now
 
 - Typed chat in the terminal with follow-up context (the last N exchanges are remembered).
@@ -94,7 +122,7 @@ Gemini can only *propose* actions; NOVA validates every proposal (allowed apps, 
 - Python 3.12
 - A Gemini API key from [Google AI Studio](https://aistudio.google.com/)
 
-## Setup
+## Setup from source
 
 ```bash
 git clone https://github.com/mesubash/nova.git
