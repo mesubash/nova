@@ -42,8 +42,10 @@ NO_SPEECH = "[no speech]"
 TRANSCRIBE_PROMPT_MIXED = (
     "Transcribe the speech in this audio exactly as spoken, without translating. The "
     "speaker may use English, Nepali, or a mix of both. Write Nepali words in Devanagari "
-    "script and English words in Latin script. Reply with only the transcript. If there "
-    "is no intelligible speech, reply with exactly: [no speech]"
+    "script and English words in Latin script. Commands often use English names and words, "
+    "such as {apps}, note, save, delete, search, and file; write these in Latin script. "
+    "Reply with only the transcript. If there is no intelligible speech, reply with "
+    "exactly: [no speech]"
 )
 
 
@@ -79,7 +81,9 @@ class GeminiClient:
         )
         self._transcribe_config = types.GenerateContentConfig(temperature=0)
         self._transcribe_prompt = (
-            TRANSCRIBE_PROMPT_MIXED if config.speech_language == "ne" else TRANSCRIBE_PROMPT
+            TRANSCRIBE_PROMPT_MIXED.format(apps=", ".join(config.allowed_apps))
+            if config.speech_language == "ne"
+            else TRANSCRIBE_PROMPT
         )
         self._client = client or genai.Client(
             api_key=config.api_key,
