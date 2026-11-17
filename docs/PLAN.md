@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.0 released. V1.1 (local transcription) in progress.
+Status: V1.4 released.
 
 ## Purpose
 
@@ -98,11 +98,25 @@ Transcribe voice questions on the Mac with Whisper running on Apple's MLX framew
 
 Complete when local transcription can be selected without code changes; latency and accuracy are measured against Gemini with the same audio and recorded; silence and noise do not produce invented text; a missing or failed model gives a clear error and typed input still works; tests use a fake model; and the documentation states the model size, the one-time download, and that local transcription keeps audio on the Mac.
 
+### V1.2 — Safety and accuracy evidence
+
+Gather evidence for existing claims rather than adding features. Run an adversarial prompt suite through the real model and the validation layer; measure transcription accuracy on recordings of the user's own voice for Gemini and local Whisper and re-decide the default from those results; and handle Gemini rate limits by waiting and retrying once when the requested delay is short.
+
+Complete when the adversarial suite executes no unapproved action and its results are recorded; the transcriber default is justified by real-voice measurements; a short rate-limit delay no longer fails a request while a long one reports how long to wait; and tests, lint, and documentation are updated.
+
 ### V1.3 — Nepali and English
 
 Let the user speak and type in Nepali, English, or a mix, and answer in the same language. Measure Nepali transcription on the user's own voice before choosing a backend, check which macOS voices can read Nepali text, and fall back clearly (text without speech) when no suitable voice exists.
 
 Complete when Nepali and mixed questions are transcribed with measured accuracy on record; NOVA answers in the language of the question; spoken output uses a suitable voice for Devanagari text or explains why it is silent; actions and notes work with Nepali text; tests cover language and voice selection; and the documentation states the measured results and limits.
+
+### V1.4 — Nepali voice commands
+
+V1.3 measured transcription word by word, which overstates the problem for commands: `safari खोल्नुस्` is a transcription error but still asks for the right action. Measure what matters instead: does a spoken Nepali or mixed command lead to the intended action proposal? Record a command set in the developer's voice (open apps, open sites, save/show/find/delete notes, folder search, including English names such as Safari and GitHub), run each through transcription and the model, and compare the proposed action and arguments with the expected one. Nothing is executed.
+
+Decide any fix only after this baseline, with an adoption rule fixed before measuring. Candidates, smallest first: naming the allowed apps and common command words in the Nepali-mode transcription prompt; teaching the system instruction that romanised or misspelled names refer to allowed apps. English mode stays unchanged unless its own measurement shows no regression.
+
+Complete when the command baseline and any re-measurement are recorded with per-phrase results; any change is adopted only by its pre-stated rule; misheard commands still never run without confirmation; tests cover any changed prompt or name handling; and the documentation states the measured command success rate and remaining limits.
 
 ## Application design
 
@@ -138,22 +152,23 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 
 ## Progress
 
-- [ ] V0.1 Foundation and text conversation
-- [ ] V0.2 Spoken output
-- [ ] V0.3 Voice input
+- [x] V0.1 Foundation and text conversation
+- [x] V0.2 Spoken output
+- [x] V0.3 Voice input
 - [x] V0.4 Small desktop interface
-- [ ] V0.5 Controlled desktop actions
-- [ ] V0.6 Persistent notes
+- [x] V0.5 Controlled desktop actions
+- [x] V0.6 Persistent notes
 - [x] V1.0 Portfolio release
-- [ ] V1.1 Local transcription
+- [x] V1.1 Local transcription
+- [x] V1.2 Safety and accuracy evidence
+- [x] V1.3 Nepali and English
+- [x] V1.4 Nepali voice commands
 
 ## After V1.0 (optional, one at a time)
 
 Each option is chosen for what it teaches, not for novelty:
 
 - Fully local mode: local Whisper and a small local model on the M4, benchmarked against Gemini using recorded measurements.
-- Nepali/English mixed speech support.
-- An adversarial test suite that attempts to trick the action layer into unapproved apps, URLs, or paths, verifying validation holds.
 
 ## Deferred features
 
@@ -163,4 +178,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-Measure mlx-whisper model sizes on the M4 (speed, accuracy, and behaviour on noise) before integrating a local transcriber.
+No milestone is planned after V1.4. Choose the next one from the optional list above, write its completion criteria here, and measure before building.

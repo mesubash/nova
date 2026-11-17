@@ -274,10 +274,11 @@ def test_nepali_mode_uses_the_mixed_language_prompt():
 
     fake = Mock()
     fake.models.generate_content = Mock(return_value=fake_response(text="नमस्ते"))
-    config = Config(api_key="k", model="m", speech_language="ne")
+    config = Config(api_key="k", model="m", speech_language="ne", allowed_apps=("Safari", "Notes"))
     GeminiClient(config, client=fake, sleep=lambda s: None).transcribe(WAV)
     parts = fake.models.generate_content.call_args.kwargs["contents"][0].parts
-    assert parts[0].text == TRANSCRIBE_PROMPT_MIXED
+    assert parts[0].text == TRANSCRIBE_PROMPT_MIXED.format(apps="Safari, Notes")
+    assert "such as Safari, Notes, note" in parts[0].text
 
 
 def test_english_mode_keeps_the_original_prompt():
