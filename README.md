@@ -4,7 +4,7 @@
 
 A macOS-first personal AI voice assistant, built as a learning project on a MacBook Air M4.
 
-**Status:** V1.3. A personal voice assistant for macOS with typed and spoken conversation in English and Nepali, a desktop window, confirmed desktop actions, and persistent notes, with measured safety and accuracy. Built as a learning project; see [docs/PLAN.md](docs/PLAN.md) and [docs/architecture.md](docs/architecture.md).
+**Status:** V1.4. A personal voice assistant for macOS with typed and spoken conversation in English and Nepali, a desktop window, confirmed desktop actions, and persistent notes, with measured safety and accuracy. Built as a learning project; see [docs/PLAN.md](docs/PLAN.md) and [docs/architecture.md](docs/architecture.md).
 
 ![NOVA desktop window](docs/images/nova-window.png)
 
@@ -67,6 +67,8 @@ echo 'NOVA_SPEECH_LANGUAGE=ne' >> .env
 
 In this mode NOVA transcribes Nepali, English, or a mix, and answers in the language of the question. Measured on the developer's own voice (12 phrases), Gemini had a 25.5% character error rate: ordinary questions were mostly exact, while commands that mix in English words were often misheard. Local Whisper reached 47.2% and is refused in this mode. See [docs/transcription-results-nepali.md](docs/transcription-results-nepali.md).
 
+For commands, what matters is whether NOVA proposes the right action, not whether every word is transcribed exactly. On 15 recorded Nepali commands (`scripts/command_benchmark.py`), spoken commands led to the intended action 9 times, and the same commands typed led to it every time. Naming the allowed apps and command words in the transcription prompt raised spoken commands from 6 to 9. See [docs/command-results.md](docs/command-results.md).
+
 macOS has no Nepali voice, so Devanagari answers are read by a Hindi voice (`Lekha` by default, set with `NOVA_DEVANAGARI_VOICE`). If that voice is not installed, the answer is shown as text with an explanation.
 
 ## Limitations
@@ -80,7 +82,7 @@ macOS has no Nepali voice, so Devanagari answers are read by a Hindi voice (`Lek
 - The API key is stored in a private file rather than the macOS Keychain.
 - The app is not signed with a Developer ID or notarized.
 - Local transcription is available when running from source only; the packaged app uses Gemini.
-- Nepali transcription is less accurate than English, especially for commands that mix in English names; a misheard command still needs your confirmation before anything happens.
+- Nepali transcription is less accurate than English: about 6 of 10 spoken Nepali commands lead to the intended action, and names such as GitHub or note numbers are sometimes misheard. A misheard command still needs your confirmation before anything happens.
 
 ## Security
 

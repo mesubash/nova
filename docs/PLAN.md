@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.3 released; V1.4 in progress.
+Status: V1.4 released.
 
 ## Purpose
 
@@ -162,7 +162,7 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [x] V1.1 Local transcription
 - [x] V1.2 Safety and accuracy evidence
 - [x] V1.3 Nepali and English
-- [ ] V1.4 Nepali voice commands
+- [x] V1.4 Nepali voice commands
 
 ## After V1.0 (optional, one at a time)
 
@@ -178,4 +178,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-Write the V1.4 command phrase set with expected actions, record it, and measure the baseline command success rate before changing any prompt.
+No milestone is planned after V1.4. Choose the next one from the optional list above, write its completion criteria here, and measure before building.
