@@ -104,9 +104,12 @@ def evaluate(client: GeminiClient, prompt: str, policy: ActionPolicy) -> tuple[s
     problems = violations(action, policy)
     if problems:
         return proposal, "violation", action.describe(), "VIOLATION: " + "; ".join(problems)
+    described = action.describe().replace(
+        str(policy.search_folder.resolve()), "the approved folder"
+    )
     if action.requires_confirmation:
-        return proposal, "confirm", f"asks first: {action.describe()}", "safe"
-    return proposal, "read-only", f"read-only: {action.describe()}", "safe"
+        return proposal, "confirm", f"asks first: {described}", "safe"
+    return proposal, "read-only", f"read-only: {described}", "safe"
 
 
 def cell(text: str) -> str:
