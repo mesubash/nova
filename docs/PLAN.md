@@ -1,6 +1,6 @@
 # NOVA — Development Plan
 
-Status: V1.4 released.
+Status: V1.4 released; V1.5 planned.
 
 ## Purpose
 
@@ -92,6 +92,8 @@ Known packaging requirements:
 
 Complete when a clean setup follows the README, the main demo succeeds repeatedly, important error paths work, tests and lint checks pass, and planned versus implemented capabilities are accurate in documentation.
 
+The short demo video was dropped on 2026-11-17: the README screenshot, highlights, and recorded measurements stand in for it.
+
 ### V1.1 — Local transcription
 
 Transcribe voice questions on the Mac with Whisper running on Apple's MLX framework, instead of sending audio to Gemini. The backend is selected with `NOVA_TRANSCRIBER` (`gemini` or `local`) and the model with a setting. Choose the default model by measuring candidates on the M4. Load the model once and reuse it; the first use may download it from Hugging Face.
@@ -117,6 +119,14 @@ V1.3 measured transcription word by word, which overstates the problem for comma
 Decide any fix only after this baseline, with an adoption rule fixed before measuring. Candidates, smallest first: naming the allowed apps and common command words in the Nepali-mode transcription prompt; teaching the system instruction that romanised or misspelled names refer to allowed apps. English mode stays unchanged unless its own measurement shows no regression.
 
 Complete when the command baseline and any re-measurement are recorded with per-phrase results; any change is adopted only by its pre-stated rule; misheard commands still never run without confirmation; tests cover any changed prompt or name handling; and the documentation states the measured command success rate and remaining limits.
+
+### V1.5 — Fully local mode
+
+Let NOVA answer and propose actions with a small language model running on the Mac through MLX (`mlx-lm`, the same framework as local Whisper), so that with local transcription nothing leaves the Mac. Select it with a setting (`NOVA_CHAT=gemini` or `local`) and the model with another; Gemini stays the default. The local model must use the same eight action declarations, and every proposal still goes through `validate()` and confirmation, so a weaker model can be less helpful but not less safe.
+
+Measure before integrating. Benchmark a few small instruction-tuned models (about 1–4B parameters, 4-bit) on the M4 with 16 GB: load time, memory, time to first token and full reply on fixed questions, and whether they produce valid function calls. Write the adoption rule in `docs/decisions.md` before measuring. A model is offered only if the adversarial suite gives 0 violations with it and typed English commands lead to the intended action at a stated minimum rate. Measure Nepali separately; if it is poor, refuse local chat in Nepali mode with a clear message, as local Whisper is refused.
+
+Complete when local chat can be selected without code changes; candidates are measured and the chosen model is justified by the pre-stated rule; the adversarial suite and command benchmark run against the local model with results recorded; the model loads once, the first-use download is stated, and a missing or failed model gives a clear error while Gemini mode still works; tests use a fake model; and the documentation states the model size, memory use, measured speed and accuracy, and that with local transcription and local chat no question or audio leaves the Mac.
 
 ## Application design
 
@@ -163,12 +173,11 @@ Use `main` for working checkpoints and short-lived feature branches (for example
 - [x] V1.2 Safety and accuracy evidence
 - [x] V1.3 Nepali and English
 - [x] V1.4 Nepali voice commands
+- [ ] V1.5 Fully local mode
 
 ## After V1.0 (optional, one at a time)
 
-Each option is chosen for what it teaches, not for novelty:
-
-- Fully local mode: local Whisper and a small local model on the M4, benchmarked against Gemini using recorded measurements.
+Each option is chosen for what it teaches, not for novelty. Every option listed here so far has become a milestone (V1.1–V1.5). Add new ones one at a time, after the current milestone is complete.
 
 ## Deferred features
 
@@ -178,4 +187,4 @@ Reminders require a separate decision about scheduling, persistence, notificatio
 
 ## First next step
 
-No milestone is planned after V1.4. Choose the next one from the optional list above, write its completion criteria here, and measure before building.
+Write `scripts/benchmark_local_chat.py` and the adoption rule, then measure candidate local models on the M4 (speed, memory, and valid function calls) before adding any local chat code to NOVA.
